@@ -1,8 +1,9 @@
 import json
-from os import listdir
-from os.path import isdir, join
 
-conf = open("config.json", "r", encoding="utf-8")
+_conf_data = json.load(open("config.json", "r", encoding="utf-8"))
 
-conf_data = json.load(conf)
-arms = conf_data.get("arms")
+def get_arms_list():
+	return _conf_data.get("arms")
+
+def get_main_dir():
+	return _conf_data.get("mainDir")

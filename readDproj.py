@@ -1,7 +1,4 @@
 from lxml import etree
-from os.path import realpath
-
-from config import arms
 
 def read_dproj(path):
 	"""Парсит файл *.dproj и извлекает имена упомянутых в нём модулей и форм."""
@@ -21,10 +18,3 @@ def read_dproj(path):
 			forms.append(module_name[:len(module_name)-3]+"dfm")
 	return {"modules": modules, "forms": forms}
 
-for arm in arms:
-	arm_data = read_dproj(arm["path"])
-	print("АРМ "+arm["name"])
-	print("-----------------------------------------")
-	print(arm_data["modules"])	
-	print(arm_data["forms"])
-	print("-----------------------------------------")
