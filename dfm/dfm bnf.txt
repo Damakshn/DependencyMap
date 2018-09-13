@@ -14,9 +14,11 @@ complex_property ::= NAME '=' complex_value NEWLINE
 
 scalar_value ::= SCALAR 
 
-complex_value ::= sequence | square_sequence | triangle_sequence
+complex_value ::= sequence | square_sequence | triangle_sequence | strings
 
 sequence ::= '(' [NEWLINE scalar_value]* ')'
+
+strings ::= '(' [NEWLINE scalar_value][ '+' ]* | [NEWLINE scalar_value]* ')'
 
 square_sequence ::= '[' scalar_value,* ']'
 
