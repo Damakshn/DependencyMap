@@ -15,27 +15,27 @@ class Reader(object):
         self.stream = input_data
         self.line = 0
         self.pointer = 0
-        self.eof = (self.pointer < len(input_data))
+        self.eof = (self.pointer >= len(input_data))
 
     def forward(self, length=1) -> None:
         if self.eof:
             return
-        self.pointer+=1
-        if self.stream[self.pointer] == b"\n":
-            self.line += 1
-        if (self.pointer+1) == len(self.stream):
-            self.eof = True
-
-    def peek(self, length=1):
-        if self.eof:
-            return b"\0"
-        if (self.pointer+length) > len(self.stream):
+        if self.pointer+length >= len(self.stream):
             raise ReaderError("Out of range")
+        while length:            
+            self.pointer+=1
+            if chr(self.stream[self.pointer]) == "\n":
+                self.line += 1
+            if (self.pointer+1) == len(self.stream):
+                self.eof = True                
+            length-=1
+
+    def peek(self, length=0):
+        if (self.pointer+length) >= len(self.stream):
+            return b"\0"
         return self.stream[self.pointer+length]
 
     def get_chunk(self, length=1):
-        if self.eof:
-            return b"\0"
-        if self.pointer+length > len(self.stream):
+        if self.pointer+length >= len(self.stream):
             raise ReaderError("Out of range")
         return self.stream[self.pointer:self.pointer+length]
