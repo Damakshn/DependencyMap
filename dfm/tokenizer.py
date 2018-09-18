@@ -1,10 +1,3 @@
-"""
-Перемещается между токенами
-Распознаёт все токены по отдельности
-Кидает ошибки для кривых токенов
-"""
-
-
 class TokenizerError(Exception):
     pass
 
@@ -15,6 +8,9 @@ class Tokenizer(object):
         self.tokens = []
         self.current_token = None
 
+    def has_tokens(self):
+        return !self.done
+
     def check_token(self, choices*) -> boolean:
         pass
 
@@ -22,7 +18,7 @@ class Tokenizer(object):
         pass
 
     def get_next_token(self) -> Token:
-        pass
+        return self.tokens.pop()
 
     def move_to_next_token(self) -> None:
         while self.peek() in b" \r\n\0":
