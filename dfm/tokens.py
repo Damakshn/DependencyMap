@@ -1,61 +1,68 @@
 class Token(object):
+    id = 'GENERIC_TOKEN'
+    def __init__(self):
+        self.value = ""
 
-	def __init__(self):
-		self.value = ""
+    def __repr__(self):
+        if self.value != "":
+            return str(self.value)
+        else:
+            return self.id
+
 
 class ObjectToken(Token):
-	id = "OBJECT"
+    id = "OBJECT"
 
 class TypeDefinitionToken(Token):
-	id = "TYPEDEF"
+    id = "TYPEDEF"
 
-	def __init__(self, value):
-		self.value = value
+    def __init__(self, value):
+        self.value = value
 
 class IdentifierToken(Token):
-	id = "IDENTIFIER"
+    id = "IDENTIFIER"
 
-	def __init__(self, value):
-		self.value = value
+    def __init__(self, value):
+        self.value = value
 
 class ScalarToken(Token):
-	id = "SCALAR"
+    id = "SCALAR"
 
-	def __init__(self, value):
-		self.value = value
+    def __init__(self, value):
+        self.value = value
 
 class AssignmentToken(Token):
-	id = ""
+    id = "="
 
 class ItemToken(Token):
-	id = "ITEM"
+    id = "ITEM"
 
-class ValueSequenceStartToken(Token):
-	id = "("
+class ScalarSequenceStartToken(Token):
+    id = "("
 
-class ValueSequenceEndToken(Token):
-	id = ")"
+class ScalarSequenceEndToken(Token):
+    id = ")"
 
 class IdentifierSequenceStartToken(Token):
-	id = "["
+    id = "["
 
 class IdentifierSequenceEndToken(Token):
-	id = "]"
+    id = "]"
 
 class ItemSequenceStartToken(Token):
-	id = "<"
+    id = "<"
 
 class ItemSequenceEndToken(Token):
-	id = ">"
+    id = ">"
 
 class BinarySequenceStartToken(Token):
-	id = "{"
+    id = "{"
 
 class BinarySequenceEndToken(Token):
-	id = "}"
+    id = "}"
 
 class BlockEndToken(Token):
-	id = "END"
+    id = "END_BLOCK"
 
 class SequenceEntryToken(Token):
-	id = ","
+    id = ","

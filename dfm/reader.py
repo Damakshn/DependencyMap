@@ -22,7 +22,7 @@ class Reader(object):
             return
         if self.pointer+length >= len(self.stream):
             raise ReaderError("Out of range")
-        while length:            
+        while length:
             self.pointer+=1
             if chr(self.stream[self.pointer]) == "\n":
                 self.line += 1
@@ -35,7 +35,7 @@ class Reader(object):
             return b"\0"
         return self.stream[self.pointer+length]
 
-    def get_chunk(self, length=1):
-        if self.pointer+length >= len(self.stream):
+    def get_chunk(self, length=1):        
+        if self.pointer+length-1 >= len(self.stream):
             raise ReaderError("Out of range")
         return self.stream[self.pointer:self.pointer+length]
