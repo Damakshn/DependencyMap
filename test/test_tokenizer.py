@@ -1,18 +1,21 @@
 """
 Что тестируем
-Перемещение от токена к токену
+* Перемещение к следующему токену
+* Извлечение слова
 Распознавание токенов всех типов (пока без многострочек, русских букв и бинарников)
-    Объект, заголовок, тип, свойство, простое значение, последовательности ((), [], <>), конец
-Извлечение токенов
-Ошибка при попытке обработать кривой токен (без учета контекста, это задача парсера)
-Перебор всего документа от начала до конца без ошибок
+* Распознавание последовательностей токенов
+* [qwe,wer,ert]
+* property = value
+* property = [] () <> {}
+* property = 123
+* item p = v ... end
+* object name: type
+* Ошибка при попытке обработать кривой токен (без учета контекста, это уже задача парсера)
 """
 import unittest
 from dfm.tokenizer import Tokenizer, TokenizerError
 from dfm.tokens import *
 from dfm.reader import Reader, ReaderError
-
-#small_test_file = open("small_component.dfm", "rb")
 
 # Новый класс объединяет функции Reader и Tokenizer
 class Worker(Reader, Tokenizer):
@@ -31,26 +34,34 @@ class TestTokenizer(unittest.TestCase):
         token = t.get_next_token()
         self.assertEqual(token.id, "OBJECT")
     
+    @unittest.skip("Not implemented yet")
     def test_detect_type_definition_token(self):
         data = b" : integer\n"
         t = Worker(data)
         token = t.get_next_token()
         self.assertEqual(token.id, "TYPEDEF")
-        self.assertEqual(token.value, "integer")
+        self.assertEqual(token.value, b"integer")        
 
     def test_detect_identifier_token(self):
         data = b" someObject: objClass"
         t = Worker(data)
         token = t.get_next_token()
         self.assertEqual(token.id, "IDENTIFIER")
-        self.assertEqual(token.value, b"someObject")
+        self.assertEqual(token.value, "someObject")
 
-    def test_detect_scalar_token(self):
+    def test_detect_number_token(self):
         data = b" -123"
         t = Worker(data)
         token = t.get_next_token()
-        self.assertEqual(token.id, "SCALAR")
-        self.assertEqual(token.value, "-123")
+        self.assertEqual(token.id, "NUMBER")
+        self.assertEqual(token.value, b"-123")
+
+    def test_detect_string_token(self):
+        data = b"@1SomeThing"
+        t = Worker(data)
+        token = t.get_next_token()
+        self.assertEqual(token.id, "STRING")
+        self.assertEqual(token.value, "@1SomeThing")
 
     def test_detect_assignment_token(self):
         data = b" = value"
@@ -124,14 +135,35 @@ class TestTokenizer(unittest.TestCase):
         token = t.get_next_token()
         self.assertEqual(token.id, ",")
 
-    # Тестируем чтение документа
-    @unittest.skip("wait")
-    def test_scan_document(self):
-        # должно получиться 69 токенов
-        data = small_test_file.read()
+    def test_detect_end_of_file_token(self):
+        data = b""
         t = Worker(data)
-        tokens = []        
+        token = t.get_next_token()
+        self.assertTrue(t.eof)
+        self.assertTrue(t.done)
+        self.assertEqual(token.id, "END_FILE")
+
+    def test_detect_identifier_sequence_full(self):
+        fixture = ["[","qw", ",", "er", ",", "ty1", "]", "END_FILE"]
+        data = b"[qw,er, ty1]"
+        t = Worker(data)
+        tokens = []
         while t.has_tokens():
             token = t.get_next_token()
-            tokens.append(token)
-        self.assertTrue(len(tokens) == 69)
+            tokens.append(str(token))
+        self.assertEqual(fixture, tokens)
+
+    def test_detect_full_object_header(self):
+        self.fail("Not implemented yet")
+
+    def test_detect_full_item(self):
+        self.fail("Not implemented yet")
+
+    def test_detect_simple_property(self):
+        self.fail("Not implemented yet")
+
+    def test_detect_full_scalar_sequence(self):
+        self.fail("Not implemented yet")
+
+    def test_detect_full_item_sequence(self):
+        self.fail("Not implemented yet")

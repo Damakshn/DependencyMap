@@ -23,7 +23,7 @@ class IdentifierToken(Token):
     id = "IDENTIFIER"
 
     def __init__(self, value):
-        self.value = value
+        self.value = value.decode("utf-8")
 
 class ScalarToken(Token):
     id = "SCALAR"
@@ -66,3 +66,18 @@ class BlockEndToken(Token):
 
 class SequenceEntryToken(Token):
     id = ","
+
+class NumberToken(Token):
+    id = "NUMBER"
+
+    def __init__(self, value):
+        self.value = value
+
+class StringToken(Token):
+    id = "STRING"
+
+    def __init__(self, value):
+        self.value = value.decode("utf-8")
+
+class EndOfFileToken(Token):
+    id = "END_FILE"

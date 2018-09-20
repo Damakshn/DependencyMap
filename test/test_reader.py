@@ -29,7 +29,11 @@ class TestReader(unittest.TestCase):
         """
         Функция forward не должна заходить за пределы диапазона
         """
-        self.assertRaises(ReaderError, self.r.forward, len(self.data))
+        self.assertRaises(ReaderError, self.r.forward, len(self.data)*2)
+
+    def test_eof_detection(self):
+        self.r.forward(len(self.data))
+        self.assertTrue(self.r.eof)
 
     def test_peek(self):
         """
