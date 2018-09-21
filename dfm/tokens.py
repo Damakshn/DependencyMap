@@ -3,12 +3,11 @@ class Token(object):
     def __init__(self):
         self.value = ""
 
-    def __repr__(self):
-        if self.value != "":
+    def __repr__(self):        
+        if self.value != "":                
             return str(self.value)
         else:
             return self.id
-
 
 class ObjectToken(Token):
     id = "OBJECT"
@@ -17,7 +16,7 @@ class TypeDefinitionToken(Token):
     id = "TYPEDEF"
 
     def __init__(self, value):
-        self.value = value
+        self.value = value.decode("utf-8")
 
 class IdentifierToken(Token):
     id = "IDENTIFIER"
@@ -70,8 +69,12 @@ class SequenceEntryToken(Token):
 class NumberToken(Token):
     id = "NUMBER"
 
-    def __init__(self, value):
-        self.value = value
+    def __init__(self, value):        
+        try:
+            self.value = int(value)
+        except ValueError:
+            self.value = float(value)        
+        
 
 class StringToken(Token):
     id = "STRING"

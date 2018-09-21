@@ -4,7 +4,8 @@ class TokenizerError(Exception):
     pass
 
 class Tokenizer(object):
-    identifier_pattern = re.compile(b"^[a-z\xd0\xb0-\xd1\x8f]+[a-z\xd0\xb0-\xd1\x8f\d_]*")    
+    identifier_pattern = re.compile(b"^[a-z\xd0\xb0-\xd1\x8f]+[a-z\xd0\xb0-\xd1\x8f\d_]*", re.IGNORECASE)
+    number_pattern = re.compile(b"^-?[1-9]\d*$|^-?[1-9]\d*\.\d+|^0$")
 
     def __init__(self):
         self.done = False        
@@ -45,15 +46,8 @@ class Tokenizer(object):
     def check_valid_number(self, word: bytes) -> bool:
         # первым знаком может быть минус
         # допускаются только цифры
-        # запрещены ведущие нули
-        if word[0] == ord("-"):
-            word = word[1:]
-        if word[0] == ord("0"):
-            return False
-        for ch in word:
-            if not  chr(ch) in "0123456789":
-                return False
-        return True
+        # запрещены ведущие нули        
+        return self.number_pattern.match(word) is not None        
 
     def check_valid_identifier(self, word: bytes) -> bool:
         return self.identifier_pattern.match(word) is not None
@@ -102,17 +96,15 @@ class Tokenizer(object):
             return self.fetch_end_of_file()
 
         # если это не службный символ, читаем слово
-        word = self.fetch_word()
-
+        word = self.fetch_word()        
         if word == b"object":
             return self.fetch_object_header()
 
         if word == b"item":
             return self.fetch_item()
 
-        if word == b"end" and self.peek(3) in b" \r\n\0":
-            return self.fetch_block_end()
-            # and (self.in_item or self.in_object)
+        if word == b"end":
+            return self.fetch_block_end()            
 
         if self.check_valid_number(word):
             return self.fetch_number(word)
@@ -124,12 +116,20 @@ class Tokenizer(object):
 
     def fetch_object_header(self) -> None:
         self.current_token = ObjectToken()
+        self.forward(6)
 
     def fetch_data_type(self) -> None:
-        # текущий символ - :, ползём от него до пробела или конца строки
-        # читаем слово, убеждаемся, что это идентификатор
-        # возвращаем токен с типом данных        
-        pass
+        # текущий символ - :, 
+        # копируем всё от него до конца строки, обрезаем двоеточие в начале и пробелы
+        # убеждаемся, что остался правильный идентификатор
+        # возвращаем токен с типом данных
+        line = self.copy_to_end_of_line()
+        typedef = line[1:].strip()        
+        if self.check_valid_identifier(typedef):
+            self.current_token = TypeDefinitionToken(typedef)
+            self.forward(len(line))
+        else:
+            raise TokenizerError("Incorrect type definition")
 
     def fetch_property_name(self) -> None:
         pass
@@ -164,6 +164,7 @@ class Tokenizer(object):
 
     def fetch_item(self) -> None:
         self.current_token = ItemToken()
+        self.forward(3)
 
     def fetch_identifier(self, word: bytes) -> None:        
         self.forward(len(word)-1)
@@ -180,13 +181,14 @@ class Tokenizer(object):
 
     def fetch_block_end(self) -> None:
         self.current_token = BlockEndToken()
+        self.forward(2)
 
     def fetch_sequence_entry(self) -> None:
         self.current_token = SequenceEntryToken()
 
-    def fetch_number(self, word: bytes) -> None:
-        self.forward(len(word)-1)
-        self.current_token = NumberToken(word)
+    def fetch_number(self, word: bytes) -> None:        
+        self.current_token = NumberToken(word)        
+        self.forward(len(word))
 
     def fetch_end_of_file(self):
         self.current_token = EndOfFileToken()

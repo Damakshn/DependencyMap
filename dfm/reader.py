@@ -41,3 +41,15 @@ class Reader(object):
         if self.pointer+length-1 >= len(self.stream):
             raise ReaderError("Out of range")
         return self.stream[self.pointer:self.pointer+length]
+
+    def copy_to_end_of_line(self):
+        stop = False
+        length = 0
+        while not stop:
+            if self.peek(length) not in b"\r\n\0":
+                length+=1
+            else:
+                stop = True
+        if length > 0:
+            return self.get_chunk(length)
+        return b""
