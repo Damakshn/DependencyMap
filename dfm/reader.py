@@ -26,8 +26,7 @@ class Reader(object):
         while length:
             self.pointer+=1
             if chr(self.stream[self.pointer]) == "\n":
-                self.line += 1
-            # конец файла будет за 1 символ до настоящего из-за \0
+                self.line += 1            
             if (self.pointer+1) == len(self.stream):
                 self.eof = True                
             length-=1

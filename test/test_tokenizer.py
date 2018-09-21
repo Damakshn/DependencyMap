@@ -41,7 +41,7 @@ class TestTokenizer(unittest.TestCase):
         data = b"\n  object someObject: objClass"
         t = Worker(data)
         token = t.get_next_token()
-        self.assertEqual(token.id, "OBJECT")    
+        self.assertEqual(token.id, "OBJECT")
     
     def test_detect_type_definition_token(self):
         data = b" : integer\n"
