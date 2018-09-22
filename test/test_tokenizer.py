@@ -1,6 +1,5 @@
 """
 Что тестируем
-* обработка переходов на новую строку, учёт переходов при захвате токенов
 * Ошибка при попытке обработать кривой токен (без учета контекста, это уже задача парсера)
 """
 import unittest
@@ -167,15 +166,14 @@ class TestTokenizer(unittest.TestCase):
             ["ITEM", "prop1", "=", "value1", "prop2", "=", 2, "END_BLOCK", "END_FILE"],
             b"item\r\n  prop1 = value1\r\n  prop2 = 2\r\nend")
 
-    def test_detect_simple_property(self):        
+    def test_detect_simple_property(self):
         self.check_sequence(
             ["propertyName", "=", "propertyValue", "END_FILE"],
             b"propertyName = propertyValue")
 
-    def test_detect_full_scalar_sequence(self):
-        self.fail("new line is not processed as comma")
+    def test_detect_full_scalar_sequence(self):        
         self.check_sequence(
-            ["(",",",1,",",2,",",3,")", "END_FILE"],
+            ["(",1,2,3,")", "END_FILE"],
             b"(\r\n1\r\n2\r\n3)")
     
     def test_detect_empty_scalar_sequence(self):
@@ -213,3 +211,8 @@ class TestTokenizer(unittest.TestCase):
         self.check_sequence(
             ["itemSeq", "=", "<", "ITEM", "prop1", "=", "value1", "prop2", "=", 2, "END_BLOCK", "ITEM", "prop3", "=", 182, "END_BLOCK", ">", "END_FILE"],
             b"itemSeq = <\r\nitem\r\n  prop1 = value1\r\n  prop2 = 2\r\nend\r\nitem\r\n  prop3 = 182\r\nend>")
+
+    def test_detect_string_with_spaces(self):
+        self.check_sequence(
+            ["property", "=", "aaa bbb ccc","END_FILE"],
+            b"property = aaa bbb ccc")

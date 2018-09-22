@@ -18,6 +18,7 @@ class Tokenizer(object):
         self.done = False        
         self.current_token = None
         self.in_quotes = False
+        self.assignment = False
 
     def has_tokens(self):
         return not self.done
@@ -30,17 +31,22 @@ class Tokenizer(object):
 
     def get_next_token(self) -> Token:
         if self.has_tokens():
-            self.fetch_next_token()            
+            self.fetch_next_token()
+            if isinstance(self.current_token, AssignmentToken):
+                self.assignment = True
+            else:
+                self.assignment = False
             self.forward()
             return self.current_token
 
     def move_to_next_token(self) -> None:
+        old_line = self.line
         stop = False
         while not stop:            
             if self.peek() in b" \r\n":
                 self.forward()
             else:
-                stop = True        
+                stop = True                
 
     def fetch_word(self) -> str:
         # доползти до первого символа, являющегося служебным и вернуть всё от текущего символа до крайнего
@@ -60,11 +66,11 @@ class Tokenizer(object):
         self.move_to_next_token()
         ch = chr(self.peek())
         # проверяем на служебные символы
-        if ch == ":" and not self.in_quotes:
-            return self.fetch_data_type()
-
         if ch == "=" and not self.in_quotes:
             return self.fetch_assignment()
+
+        if ch == ":" and not self.in_quotes:
+            return self.fetch_data_type()
 
         if ch == "'" and not self.in_quotes:
             return self.fetch_quoted_string()
@@ -75,10 +81,10 @@ class Tokenizer(object):
         if ch == ">" and not self.in_quotes:
             return self.fetch_item_sequence_end()
 
-        if ch == "[" and not self.in_quotes:
+        if ch == "[" and not self.in_quotes:            
             return self.fetch_identifier_sequence_start()
 
-        if ch == "]" and not self.in_quotes:
+        if ch == "]" and not self.in_quotes:            
             return self.fetch_identifier_sequence_end()
 
         if ch == "(" and not self.in_quotes:
@@ -99,20 +105,22 @@ class Tokenizer(object):
         if ch == "\0":
             return self.fetch_end_of_file()
 
-        # если это не службный символ, читаем слово
-        word = self.fetch_word()
+        # если это не службный символ, читаем текст куском
+        # если это не первый токен после "=", читаем слово до пробела
+        if not self.assignment:
+            word = self.fetch_word()
+        else:
+            # иначе читаем до конца строки
+            word = self.copy_to_end_of_line().strip()
+        
         if word == b"object":
             return self.fetch_object_header()
-
         if word == b"item":
             return self.fetch_item()
-
         if word == b"end":
             return self.fetch_block_end()
-
         if self.check_valid_number(word):
             return self.fetch_number(word)
-
         if self.check_valid_identifier(word):
             return self.fetch_identifier(word)
 
@@ -145,8 +153,8 @@ class Tokenizer(object):
         pass
 
     def fetch_string(self, word: bytes) -> None:
-        self.forward(len(word)-1)
         self.current_token = StringToken(word)
+        self.forward(len(word)-1)
 
     def fetch_scalar_sequence_start(self) -> None:
         self.current_token = ScalarSequenceStartToken()
@@ -171,8 +179,8 @@ class Tokenizer(object):
         self.forward(3)
 
     def fetch_identifier(self, word: bytes) -> None:
-        self.forward(len(word)-1)
         self.current_token = IdentifierToken(word)
+        self.forward(len(word)-1)
 
     def fetch_binary_sequence_start(self) -> None:
         self.current_token = BinarySequenceStartToken()
@@ -192,7 +200,7 @@ class Tokenizer(object):
 
     def fetch_number(self, word: bytes) -> None:
         self.current_token = NumberToken(word)
-        self.forward(len(word))
+        self.forward(len(word)-1)
 
     def fetch_end_of_file(self):
         self.current_token = EndOfFileToken()
