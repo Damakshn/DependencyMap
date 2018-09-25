@@ -10,7 +10,7 @@ class TestParser(unittest.TestCase):
 
     def test_init(self):
         self.fail("not implemented yet")
-    
+
     def test_parse_object_property_with_string_value(self):
         self.fail("not implemented yet")
 

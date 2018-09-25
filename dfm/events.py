@@ -1,2 +1,2 @@
 class Event(object):
-	pass
+    pass

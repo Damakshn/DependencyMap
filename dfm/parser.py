@@ -1,8 +1,10 @@
 from .events import *
 from .tokenizer import Tokenizer
 
+
 class ParserError(Exception):
     pass
+
 
 class Parser(object):
 
@@ -34,7 +36,7 @@ class Parser(object):
     def peek_event(self) -> Event:
         if self.current_event is None:
             if self.state:
-                self.current_event = self.state()        
+                self.current_event = self.state()
         return self.current_event
 
     def parse_file(self) -> Event:
@@ -63,7 +65,6 @@ class Parser(object):
         # включить parse_object_content, добавить его в стек
         # вернуть object_type_event с пустым типом
         pass
-    
 
     def parse_object_content(self) -> Event:
         # допустимые токены: идентификатор, объект, конец блока
@@ -114,7 +115,6 @@ class Parser(object):
         pass
 
     def parse_quoted_string(self) -> Event:
-        # 
         pass
 
     def parse_value_sequence(self) -> Event:
@@ -143,4 +143,3 @@ class Parser(object):
 
     def parse_binary_sequence(self) -> Event:
         pass
-

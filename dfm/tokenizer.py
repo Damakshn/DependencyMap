@@ -1,14 +1,18 @@
 from .reader import Reader
 from .tokens import *
 import re
+
+
 class TokenizerError(Exception):
     pass
 
+
 class Tokenizer(object):
     # регулярка для проверки идентификаторов
-    # правильный идентификатор содержит английские и русские буквы любого регистра, цифры, _
-    # и не может начинаться с цифры
-    identifier_pattern = re.compile(b"^[a-z\xd0\xb0-\xd1\x8f_]+[a-z\xd0\xb0-\xd1\x8f\d_]*", re.IGNORECASE)
+    # правильный идентификатор содержит английские и
+    # русские буквы любого регистра, цифры, _ и не может начинаться с цифры
+    identifier_pattern = re.compile(
+        b"^[a-z\xd0\xb0-\xd1\x8f_]+[a-z\xd0\xb0-\xd1\x8f\d_]*", re.IGNORECASE)
     # регулярка для валидации чисел
     # первым знаком может быть минус
     # допускаются только цифры (и точка, если это дробь)
@@ -16,7 +20,7 @@ class Tokenizer(object):
     number_pattern = re.compile(b"^-?[1-9]\d*$|^-?[1-9]\d*\.\d+|^0$")
 
     def __init__(self, data):
-        self.done = False        
+        self.done = False
         self.current_token = None
         self.in_quotes = False
         self.assignment = False
@@ -42,23 +46,22 @@ class Tokenizer(object):
             return self.current_token
 
     def move_to_next_token(self) -> None:
-        old_line = self.reader.line
         stop = False
-        while not stop:            
+        while not stop:
             if self.reader.peek() in b" \r\n":
                 self.reader.forward()
             else:
-                stop = True                
+                stop = True
 
     def fetch_word(self) -> str:
-        # доползти до первого символа, являющегося служебным и вернуть всё от текущего символа до крайнего
+        # доползти до первого символа, являющегося служебным
+        # и вернуть всё от текущего символа до крайнего
         length = 1
         while not self.reader.peek(length) in b" :=\r\n+,;-[]()<>{}\0":
-            length+=1
-        #self.reader.forward()
+            length += 1
         return self.reader.get_chunk(length)
 
-    def check_valid_number(self, word: bytes) -> bool:        
+    def check_valid_number(self, word: bytes) -> bool:
         return self.number_pattern.match(word) is not None
 
     def check_valid_identifier(self, word: bytes) -> bool:
@@ -83,10 +86,10 @@ class Tokenizer(object):
         if ch == ">" and not self.in_quotes:
             return self.fetch_item_sequence_end()
 
-        if ch == "[" and not self.in_quotes:            
+        if ch == "[" and not self.in_quotes:
             return self.fetch_identifier_sequence_start()
 
-        if ch == "]" and not self.in_quotes:            
+        if ch == "]" and not self.in_quotes:
             return self.fetch_identifier_sequence_end()
 
         if ch == "(" and not self.in_quotes:
@@ -114,7 +117,7 @@ class Tokenizer(object):
         else:
             # иначе читаем до конца строки
             word = self.reader.copy_to_end_of_line().strip()
-        
+
         if word == b"object":
             return self.fetch_object_header()
         if word == b"item":
@@ -133,21 +136,21 @@ class Tokenizer(object):
         self.reader.forward(6)
 
     def fetch_data_type(self) -> None:
-        # текущий символ - :, 
-        # копируем всё от него до конца строки, обрезаем двоеточие в начале и пробелы
+        # текущий символ - :,
+        # копируем всё от него до конца строки, обрезаем двоеточие и пробелы
         # убеждаемся, что остался правильный идентификатор
         # возвращаем токен с типом данных
         line = self.reader.copy_to_end_of_line()
-        typedef = line[1:].strip()        
+        typedef = line[1:].strip()
         if self.check_valid_identifier(typedef):
             self.current_token = TypeDefinitionToken(typedef)
             self.reader.forward(len(line))
         else:
-            raise TokenizerError("Incorrect type definition")    
+            raise TokenizerError("Incorrect type definition")
 
     def fetch_string(self, word: bytes) -> None:
         self.current_token = StringToken(word)
-        self.reader.forward(len(word)-1)
+        self.reader.forward(len(word) - 1)
 
     def fetch_scalar_sequence_start(self) -> None:
         self.current_token = ScalarSequenceStartToken()
@@ -173,7 +176,7 @@ class Tokenizer(object):
 
     def fetch_identifier(self, word: bytes) -> None:
         self.current_token = IdentifierToken(word)
-        self.reader.forward(len(word)-1)
+        self.reader.forward(len(word) - 1)
 
     def fetch_binary_sequence_start(self) -> None:
         self.current_token = BinarySequenceStartToken()
@@ -193,7 +196,7 @@ class Tokenizer(object):
 
     def fetch_number(self, word: bytes) -> None:
         self.current_token = NumberToken(word)
-        self.reader.forward(len(word)-1)
+        self.reader.forward(len(word) - 1)
 
     def fetch_end_of_file(self):
         self.current_token = EndOfFileToken()
