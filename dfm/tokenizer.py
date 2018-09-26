@@ -30,10 +30,19 @@ class Tokenizer(object):
         return not self.done
 
     def check_token(self, *choices) -> bool:
-        pass
+        if self.current_token:
+            if not choices:
+                return True
+            for choice in choices:
+                if (isinstance(self.current_token, choice)):
+                    return True
+        return False
 
     def peek_token(self) -> Token:
-        pass
+        if self.current_token:
+            return self.current_token
+        else:
+            return None
 
     def get_next_token(self) -> Token:
         if self.has_tokens():
@@ -128,8 +137,10 @@ class Tokenizer(object):
             return self.fetch_number(word)
         if self.check_valid_identifier(word):
             return self.fetch_identifier(word)
-
-        return self.fetch_string(word)
+        if word != b"":
+            return self.fetch_string(word)
+        else:
+            raise TokenizerError("Empty token")
 
     def fetch_object_header(self) -> None:
         self.current_token = ObjectToken()
@@ -188,7 +199,7 @@ class Tokenizer(object):
         self.current_token = AssignmentToken()
 
     def fetch_block_end(self) -> None:
-        self.current_token = BlockEndToken()
+        self.current_token = EndOfBlockToken()
         self.reader.forward(2)
 
     def fetch_sequence_entry(self) -> None:

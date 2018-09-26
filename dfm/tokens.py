@@ -22,20 +22,6 @@ class TypeDefinitionToken(Token):
         self.value = value.decode("utf-8")
 
 
-class IdentifierToken(Token):
-    id = "IDENTIFIER"
-
-    def __init__(self, value):
-        self.value = value.decode("utf-8")
-
-
-class ScalarToken(Token):
-    id = "SCALAR"
-
-    def __init__(self, value):
-        self.value = value
-
-
 class AssignmentToken(Token):
     id = "="
 
@@ -44,27 +30,31 @@ class ItemToken(Token):
     id = "ITEM"
 
 
-class ScalarSequenceStartToken(Token):
+class SequenceToken(Token):
+    pass
+
+
+class ScalarSequenceStartToken(SequenceToken):
     id = "("
 
 
-class ScalarSequenceEndToken(Token):
+class ScalarSequenceEndToken(SequenceToken):
     id = ")"
 
 
-class IdentifierSequenceStartToken(Token):
+class IdentifierSequenceStartToken(SequenceToken):
     id = "["
 
 
-class IdentifierSequenceEndToken(Token):
+class IdentifierSequenceEndToken(SequenceToken):
     id = "]"
 
 
-class ItemSequenceStartToken(Token):
+class ItemSequenceStartToken(SequenceToken):
     id = "<"
 
 
-class ItemSequenceEndToken(Token):
+class ItemSequenceEndToken(SequenceToken):
     id = ">"
 
 
@@ -72,11 +62,11 @@ class BinarySequenceStartToken(Token):
     id = "{"
 
 
-class BinarySequenceEndToken(Token):
+class BinarySequenceEndToken(SequenceToken):
     id = "}"
 
 
-class BlockEndToken(Token):
+class EndOfBlockToken(Token):
     id = "END_BLOCK"
 
 
@@ -84,7 +74,25 @@ class SequenceEntryToken(Token):
     id = ","
 
 
-class NumberToken(Token):
+class ValueToken(Token):
+    pass
+
+
+class ScalarToken(ValueToken):
+    id = "SCALAR"
+
+    def __init__(self, value):
+        self.value = value
+
+
+class IdentifierToken(ValueToken):
+    id = "IDENTIFIER"
+
+    def __init__(self, value):
+        self.value = value.decode("utf-8")
+
+
+class NumberToken(ValueToken):
     id = "NUMBER"
 
     def __init__(self, value):
@@ -94,7 +102,7 @@ class NumberToken(Token):
             self.value = float(value)
 
 
-class StringToken(Token):
+class StringToken(ValueToken):
     id = "STRING"
 
     def __init__(self, value):

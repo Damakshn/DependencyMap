@@ -1,5 +1,6 @@
 from .events import *
 from .tokenizer import Tokenizer
+from .tokens import *
 
 
 class ParserError(Exception):
@@ -9,9 +10,16 @@ class ParserError(Exception):
 class Parser(object):
 
     def __init__(self, data):
+        # обработчик состояния
         self.state = self.parse_file
+        # стек состояний
+        self.states = [self.parse_file]
         self.current_event = None
         self.tokenizer = Tokenizer(data)
+
+    def dispose(self):
+        self.state = None
+        self.states = []
 
     def check_event(self, *choices) -> bool:
         if self.current_event is None:
@@ -41,105 +49,152 @@ class Parser(object):
 
     def parse_file(self) -> Event:
         # допустимые токены: объект, конца файла
-        # взять токен
-        # если объект
-        # включить parse_object_name
-        # вернуть object_event
-        # если конец файла
-        # включить None
-        # вернуть end_of_file_event
-        pass
+        token = self.tokenizer.get_next_token()
+        if self.tokenizer.check_token(ObjectToken):
+            self.state = self.parse_object_name
+            return ObjectEvent()
+        if self.tokenizer.check_token(EndOfFileToken):
+            self.dispose()
+            return EndOfFileEvent()
+        raise ParserError(
+            "Object or end of file expected, but " + str(token) + " found.")
 
     def parse_object_name(self) -> Event:
         # допустимые токены: идентификатор
-        # если токен правильный, включить parse_object_type
-        # возвращает object_name_event
-        pass
+        token = self.tokenizer.get_next_token()
+        if self.tokenizer.check_token(IdentifierToken):
+            self.state = self.parse_object_type
+            return ObjectNameEvent(token.value)
+        raise ParserError("Identifier expected, but " + str(token) + " found.")
 
     def parse_object_type(self) -> Event:
         # допустимые токены: тип, идентификатор
-        # если тип - включить parse_object_content, добавить его в стек
-        # перейти к следующему токену (!)
-        # вернуть object_type_event
-        # если идентификатор, то тип опущен
-        # включить parse_object_content, добавить его в стек
-        # вернуть object_type_event с пустым типом
-        pass
+        token = self.tokenizer.get_next_token()
+        if self.tokenizer.check_token(TypeDefinitionToken):
+            # перейти к следующему токену,
+            # т.к. parse_object_content этого не делает
+            # это сделано затем, что тип объекта может быть пропущен
+            self.tokenizer.get_next_token()
+            self.state = self.parse_object_content
+            return ObjectTypeEvent(token.value)
+        # если идентификатор, то тип опущен и мы уже читаем свойство объекта
+        if self.tokenizer.check_token(IdentifierToken):
+            self.state = self.parse_object_content
+            return ObjectTypeEvent("")
+        raise ParserError("Object type or property name expected, but" + str(token) + " found.")
 
     def parse_object_content(self) -> Event:
         # допустимые токены: идентификатор, объект, конец блока
-        # пикнуть токен (!)
-        # если объект
-        # включить parse_object_name
-        # вернуть object_event
-        # если конец
-        # включить предыдущее состояние
-        # вернуть object_end_event
-        # если идентификатор
-        # включить parse_object_property_value
-        # вернуть property_event
+        # не брать следующий токен, а посмотреть текущий
+        # см. метод parse_object_type
+        token = self.tokenizer.peek_token()
+        if self.tokenizer.check_token(ObjectToken):
+            self.state = self.parse_object_name
+            self.states.append(self.parse_object_content)
+            return ObjectEvent()
+        if self.tokenizer.check_token(IdentifierToken):
+            self.state = self.parse_object_property_value
+            self.states.append(self.parse_object_content)
+            return PropertyNameEvent(token.value)
+        if self.tokenizer.check_token(EndOfBlockToken):
+            self.state = self.states.pop()
+            return EndOfBlockEvent()
         pass
 
     def parse_object_property_value(self) -> Event:
         # взять токен
-        # если не = - кинуть ошибку
-        # взять токен
-        # если токен начала последовательности
-        # включить parse_***_sequence
-        # вернуть ***_sequence_start_event, добавить его в стек
-        # если строка/число/идентификатор
-        # включить предыдущее состояние
-        # перейти к следующему токену
-        # вернуть string_event/scalar_event
-        pass
+        token = self.tokenizer.get_next_token()
+        if not self.tokenizer.check_token(AssignmentToken):
+            raise ParserError("Assignment (=) expected, but " + str(token) + " found")
+        token = self.tokenizer.get_next_token()
+        if self.tokenizer.check_token(BinarySequenceStartToken):
+            self.state = self.parse_binary_sequence
+            return BinarySequenceStartEvent()
+        if self.tokenizer.check_token(ScalarSequenceStartToken):
+            self.state = self.parse_scalar_sequence
+            return ScalarSequenceStartEvent()
+        if self.tokenizer.check_token(IdentifierSequenceStartToken):
+            self.state = self.parse_identifier_sequence
+            return IdentifierSequenceStartEvent()
+        if self.tokenizer.check_token(ItemSequenceStartToken):
+            self.state = self.parse_item_sequence
+            return ItemSequenceStartEvent()
+        if self.tokenizer.check_token(ValueToken):
+            self.state = self.states.pop()
+            # при парсинге значения свойства объекта
+            # переходим к следующему токену
+            self.tokenizer.get_next_token()
+            return ValueEvent(token.value)
+        raise ParserError("Property value expected, but " + str(token) + " found")
 
     def parse_item_property_value(self) -> Event:
         # допустимые токены: числа, строки, идентификаторы
-        # взять токен
-        # если не = - кинуть ошибку
-        # взять токен
-        # если не число/строка/идентификатор - кинуть ошибку
-        # включить предыдущее состояние
-        # вернуть scalar_event/string_event
-        pass
+        token = self.tokenizer.get_next_token()
+        if not self.tokenizer.check_token(AssignmentToken):
+            raise ParserError("Assignment (=) expected, but " + str(token) + " found")
+        token = self.tokenizer.get_next_token()
+        if self.tokenizer.check_token(ValueToken):
+            self.state = self.states.pop()
+            return ValueEvent(token.value)
+        if self.tokenizer.check_token(SequenceToken):
+            raise ParserError("Sequences are not allowed in items.")
+        raise ParserError("Property value expected, but " + str(token) + " found")
 
     def parse_item(self) -> Event:
         # допустимые токены: идентификатор, конец блока
-        # взять токен
+        token = self.tokenizer.get_next_token()
         # если идентификатор
-        # включить parse_item_property_value, добавить его в стек
-        # вернуть property_event
-        # если конец блока
-        # включить предыдущее состояние
-        # вернуть item_end_event
-        pass
+        if self.tokenizer.check_token(IdentifierToken):
+            self.state = self.parse_item_property_value
+            self.states.append(self.parse_item)
+            return PropertyNameEvent(token.value)
+        if self.tokenizer.check_token(EndOfBlockToken):
+            self.state = self.states.pop()
+            return EndOfBlockEvent()
+        raise ParserError("Property name or end of block expected, but " + str(token) + " found")
 
     def parse_quoted_string(self) -> Event:
-        pass
+        raise ParserError("Not implemented yet.")
 
-    def parse_value_sequence(self) -> Event:
-        pass
+    def parse_scalar_sequence(self) -> Event:
+        token = self.tokenizer.get_next_token()
+        if self.tokenizer.check_token(NumberToken):
+            self.state = self.parse_scalar_sequence
+            self.states.append(self.parse_scalar_sequence)
+            return ValueEvent(token.value)
+        if self.tokenizer.check_token(ScalarSequenceEndToken):
+            self.state = self.states.pop()
+            return ScalarSequenceEndEvent()
+        if self.tokenizer.check_token(SequenceEntryToken):
+            raise ParserError("Commas are not allowed in scalar sequences.")
+        raise ParserError("Expected number or ')', but "+ str(token)+ " found")
 
     def parse_identifier_sequence(self) -> Event:
-        # допустимые токены: идентификатор, запятая, ]
-        # взять токен
-        # если идентификатор
-        # вернуть string_event
-        # если скобка
-        # включить предыдущее состояние
-        # вернуть identifier_sequence_end_event
-        pass
+        token = self.tokenizer.get_next_token()
+        if self.tokenizer.check_token(IdentifierToken):
+            self.state = self.parse_identifier_sequence
+            self.states.append(self.parse_identifier_sequence)
+            return ValueEvent(token.value)
+        if self.tokenizer.check_token(SequenceEntryToken):
+            self.state = self.parse_identifier_sequence
+            self.states.append(self.parse_identifier_sequence)
+            return SequenceEntryEvent()
+        if self.tokenizer.check_token(IdentifierSequenceEndToken):
+            self.state = self.states.pop()
+            return IdentifierSequenceEndEvent()
+        raise ParserError("Expected identifier, ',' or ']', but "+ str(token)+ " found")
 
     def parse_item_sequence(self) -> Event:
-        # допустимые токены: item, >
-        # взять токен
-        # если item
-        # включить parse_item, добавить его в стек
-        # вернуть item_event
-        # если скобка
-        # включить предыдущее состояние
-        # вернуть item_sequence_end_event
-        pass
+        token = self.tokenizer.get_next_token()
+        if self.tokenizer.check_token(ItemToken):
+            self.state = self.parse_item
+            self.states.append(self.parse_item_sequence)
+            return ItemEvent()
+        if self.tokenizer.check_token(ItemSequenceEndToken):
+            self.state = self.states.pop()
+            return ItemSequenceEndEvent()
+        raise ParserError("Expected item, or '>', but "+ str(token)+ " found")
+
 
     def parse_binary_sequence(self) -> Event:
-        pass
+        raise ParserError("Not implemented yet.")

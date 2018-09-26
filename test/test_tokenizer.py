@@ -134,7 +134,7 @@ class TestTokenizer(unittest.TestCase):
         data = b""
         t = Tokenizer(data)
         token = t.get_next_token()
-        self.assertTrue(t.eof)
+        self.assertTrue(t.reader.eof)
         self.assertTrue(t.done)
         self.assertEqual(token.id, "END_FILE")
 
