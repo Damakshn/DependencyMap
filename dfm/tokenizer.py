@@ -56,11 +56,14 @@ class Tokenizer(object):
 
     def move_to_next_token(self) -> None:
         stop = False
+        line = self.reader.line
         while not stop:
             if self.reader.peek() in b" \r\n":
                 self.reader.forward()
             else:
                 stop = True
+        if (self.assignment and line != self.reader.line):
+            raise TokenizerError("Missing property value after assignment")
 
     def fetch_word(self) -> str:
         # доползти до первого символа, являющегося служебным
@@ -137,10 +140,8 @@ class Tokenizer(object):
             return self.fetch_number(word)
         if self.check_valid_identifier(word):
             return self.fetch_identifier(word)
-        if word != b"":
-            return self.fetch_string(word)
-        else:
-            raise TokenizerError("Empty token")
+
+        return self.fetch_string(word)
 
     def fetch_object_header(self) -> None:
         self.current_token = ObjectToken()

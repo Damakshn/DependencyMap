@@ -1,5 +1,5 @@
 import unittest
-from dfm.tokenizer import Tokenizer
+from dfm.tokenizer import Tokenizer, TokenizerError
 
 
 class TestTokenizer(unittest.TestCase):
@@ -203,3 +203,10 @@ class TestTokenizer(unittest.TestCase):
         self.check_sequence(
             ["property", "=", "aaa bbb ccc", "END_FILE"],
             b"property = aaa bbb ccc")
+
+    def test_detect_missing_property_value(self):
+        data = b"property1 =    \r\n  property2 = 123"
+        t = Tokenizer(data)
+        for i in range(2):
+            t.get_next_token()
+        self.assertRaises(TokenizerError, t.get_next_token)

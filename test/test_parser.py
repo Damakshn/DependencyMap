@@ -3,7 +3,7 @@
 а также выдавать правильные сообщения об ошибках в тех случаях, когда представлены некорректные данные.
 """
 import unittest
-from dfm.parser import Parser
+from dfm.parser import Parser, ParserError
 from dfm.tokenizer import Tokenizer
 from dfm.events import *
 
@@ -19,6 +19,27 @@ class TestParser(unittest.TestCase):
         self.assertEqual(len(fixture), len(events))
         for i in range(len(events)):
             self.assertTrue(isinstance(events[i], fixture[i]))
+
+    def check_events_for_parsing_items(self, events, values, data):
+        """
+        Заставляет парсер разобрать свойство item'а;
+        Порядок событий и их значения должны сойтись с ожидаемыми;
+        events - ожидаемые события;
+        values - ожидаемые значения;
+        data - входные данные.
+        """
+        p = Parser(data)
+        p.state = p.parse_item
+        i = 0
+        for event in events:
+            evt = p.get_event()
+            self.assertTrue(isinstance(evt, event))
+            if values[i] is not None:
+                self.assertEqual(evt.value, values[i])
+            else:
+                self.assertIsNone(evt.value)
+            i += 1
+
 
     def check_events_for_parsing_sequences(self, events, values, data):
         """
@@ -115,10 +136,6 @@ class TestParser(unittest.TestCase):
         self.assertTrue(isinstance(evt, ValueEvent))
         self.assertEqual(evt.value, 983)
 
-    @unittest.skip("moved to test_tokenizer")
-    def test_parse_object_property_with_no_value(self):
-        self.fail("not implemented yet")
-
     def test_parse_object_property_with_identifier_sequence_value(self):        
         data = b"someProperty = [qw, er, ty]"
         events = [
@@ -166,10 +183,6 @@ class TestParser(unittest.TestCase):
         values = ["someProperty", None, None, "prop1", 1, None, None, "prop2", "foo", None, None]
         self.check_events_for_parsing_sequences(events, values, data)
 
-    @unittest.skip("moved to test_tokenizer")
-    def test_parse_object_property_no_assign(self):
-        pass
-
     @unittest.skip("not implemented yet")
     def test_binary_sequence_not_closed(self):
         self.fail("not implemented yet")
@@ -182,9 +195,17 @@ class TestParser(unittest.TestCase):
     def test_identifier_sequence_not_closed(self):
         self.fail("not implemented yet")
 
-    @unittest.skip("not implemented yet")
     def test_item_sequence_not_closed(self):
-        self.fail("not implemented yet")
+        # незакрытая последовательность item'ов вызывает ошибку
+        # т.к. парсер напарывается на название свойства вместо
+        # слова 'item' или закрывающей скобки
+        data = b"raz = <\r\nitem\r\n  prop1 = 1\r\nend\r\ndva = 2"
+        p = Parser(data)
+        p.state = p.parse_object_content
+        p.tokenizer.get_next_token()
+        for i in range(6):
+            p.get_event()
+        self.assertRaises(ParserError, p.get_event)
 
     @unittest.skip("not implemented yet")
     def test_sequence_with_open_bracket(self):
@@ -194,72 +215,84 @@ class TestParser(unittest.TestCase):
     def test_identifier_sequence_no_comma(self):
         self.fail("not implemented yet")
 
-    @unittest.skip("not implemented yet")
     def test_comma_in_non_identifier_sequence(self):
-        self.fail("not implemented yet")
+        data = b"= (1,2,3)"
+        p = Parser(data)
+        p.state = p.parse_property_value
+        for i in range(2):
+            p.get_event()
+        self.assertRaises(ParserError, p.get_event)
 
-    @unittest.skip("not implemented yet")
     def test_parse_empty_itentifier_sequence(self):
-        self.fail("not implemented yet")
+        data = b"someProperty = []"
+        events = [
+            PropertyNameEvent,
+            IdentifierSequenceStartEvent,
+            IdentifierSequenceEndEvent]
+        values = ["someProperty", None, None]
+        self.check_events_for_parsing_sequences(events, values, data)
 
     @unittest.skip("not implemented yet")
     def test_parse_empty_binary_sequence(self):
-        self.fail("not implemented yet")
+        data = b"someProperty = {}"
+        events = [
+            PropertyNameEvent,
+            BinarySequenceStartEvent,
+            BinarySequenceEndEvent]
+        values = ["someProperty", None, None]
+        self.check_events_for_parsing_sequences(events, values, data)
 
-    @unittest.skip("not implemented yet")
     def test_parse_empty_scalar_sequence(self):
-        self.fail("not implemented yet")
+        data = b"someProperty = ()"
+        events = [
+            PropertyNameEvent,
+            ScalarSequenceStartEvent,
+            ScalarSequenceEndEvent]
+        values = ["someProperty", None, None]
+        self.check_events_for_parsing_sequences(events, values, data)
 
-    @unittest.skip("not implemented yet")
     def test_parse_empty_item_sequence(self):
-        self.fail("not implemented yet")
+        data = b"someProperty = <>"
+        events = [
+            PropertyNameEvent,
+            ItemSequenceStartEvent,
+            ItemSequenceEndEvent]
+        values = ["someProperty", None, None]
+        self.check_events_for_parsing_sequences(events, values, data)
 
-    @unittest.skip("not implemented yet")
     def test_parse_item_property_with_string_value(self):
-        self.fail("not implemented yet")
+        data = b"itemProperty = here goes the value"
+        events = [PropertyNameEvent, ValueEvent]
+        values = ["itemProperty", "here goes the value"]
+        self.check_events_for_parsing_items(events, values, data)
 
-    @unittest.skip("not implemented yet")
     def test_parse_item_property_with_numeric_value(self):
-        self.fail("not implemented yet")
+        data = b"itemProperty = 557"
+        events = [PropertyNameEvent, ValueEvent]
+        values = ["itemProperty", 557]
+        self.check_events_for_parsing_items(events, values, data)
 
-    @unittest.skip("not implemented yet")
-    def test_parse_item_property_with_sequence_value(self):
-        self.fail("not implemented yet")
-
-    @unittest.skip("not implemented yet")
-    def test_parse_item_property_with_no_value(self):
-        self.fail("not implemented yet")
-
-    @unittest.skip("moved to test_tokenizer")
-    def test_parse_item_property_no_assign(self):
-        pass
-
-    @unittest.skip("not implemented yet")
-    def test_parse_object_content_with_simple_properties(self):
-        self.fail("not implemented yet")
-
-    @unittest.skip("not implemented yet")
-    def test_parse_object_content_with_sequence_properties(self):
-        self.fail("not implemented yet")
-
-    @unittest.skip("not implemented yet")
     def test_parse_object_content_with_nested_objects(self):
-        self.fail("not implemented yet")
-
-    @unittest.skip("not implemented yet")
-    def test_parse_object_content_complete(self):
-        self.fail("not implemented yet")
-
-    @unittest.skip("not implemented yet")
-    def test_parse_empty_object(self):
-        self.fail("not implemented yet")
+        data = b"object foo: bar\r\n  object spam: eggs\r\n  end\r\nend"
+        self.check_event_sequence(
+            [
+                ObjectEvent,
+                ObjectNameEvent,
+                ObjectTypeEvent,
+                ObjectEvent,
+                ObjectNameEvent,
+                ObjectTypeEvent,
+                EndOfBlockEvent,
+                EndOfBlockEvent,
+                EndOfFileEvent],
+            data)
 
     @unittest.skip("not implemented yet")
     def test_parse_object_with_omitted_type_definition(self):
         self.fail("not implemented yet")
 
     @unittest.skip("not implemented yet")
-    def test_parse_empty_object_wit_omitted_type_definition(self):
+    def test_parse_empty_object_with_omitted_type_definition(self):
         self.fail("not implemented yet")
 
     @unittest.skip("not implemented yet")

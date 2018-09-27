@@ -4,14 +4,6 @@ class Event(object):
         self.value = value
 
 
-class StringEvent(Event):
-    pass
-
-
-class NumberEvent(Event):
-    pass
-
-
 class BinarySequenceStartEvent(Event):
     pass
 
