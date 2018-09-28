@@ -22,9 +22,9 @@ class Tokenizer(object):
     def __init__(self, data):
         self.done = False
         self.current_token = None
-        self.in_quotes = False
         self.assignment = False
         self.reader = Reader(data)
+        self.mark = None
 
     def has_tokens(self):
         return not self.done
@@ -64,6 +64,7 @@ class Tokenizer(object):
                 stop = True
         if (self.assignment and line != self.reader.line):
             raise TokenizerError("Missing property value after assignment")
+        self.mark = self.reader.get_mark()
 
     def fetch_word(self) -> str:
         # доползти до первого символа, являющегося служебным
@@ -83,40 +84,40 @@ class Tokenizer(object):
         self.move_to_next_token()
         ch = chr(self.reader.peek())
         # проверяем на служебные символы
-        if ch == "=" and not self.in_quotes:
+        if ch == "=":
             return self.fetch_assignment()
 
-        if ch == ":" and not self.in_quotes:
+        if ch == ":":
             return self.fetch_data_type()
 
-        if ch == "'" and not self.in_quotes:
+        if ch == "'":
             return self.fetch_quoted_string()
 
-        if ch == "<" and not self.in_quotes:
+        if ch == "<":
             return self.fetch_item_sequence_start()
 
-        if ch == ">" and not self.in_quotes:
+        if ch == ">":
             return self.fetch_item_sequence_end()
 
-        if ch == "[" and not self.in_quotes:
+        if ch == "[":
             return self.fetch_identifier_sequence_start()
 
-        if ch == "]" and not self.in_quotes:
+        if ch == "]":
             return self.fetch_identifier_sequence_end()
 
-        if ch == "(" and not self.in_quotes:
+        if ch == "(":
             return self.fetch_scalar_sequence_start()
 
-        if ch == ")" and not self.in_quotes:
+        if ch == ")":
             return self.fetch_scalar_sequence_end()
 
-        if ch == "{" and not self.in_quotes:
+        if ch == "{":
             return self.fetch_binary_sequence_start()
 
-        if ch == "}" and not self.in_quotes:
+        if ch == "}":
             return self.fetch_binary_sequence_end()
 
-        if ch == "," and not self.in_quotes:
+        if ch == ",":
             return self.fetch_sequence_entry()
 
         if ch == "\0":
@@ -144,7 +145,7 @@ class Tokenizer(object):
         return self.fetch_string(word)
 
     def fetch_object_header(self) -> None:
-        self.current_token = ObjectToken()
+        self.current_token = ObjectToken(self.mark)
         self.reader.forward(6)
 
     def fetch_data_type(self) -> None:
@@ -155,61 +156,68 @@ class Tokenizer(object):
         line = self.reader.copy_to_end_of_line()
         typedef = line[1:].strip()
         if self.check_valid_identifier(typedef):
-            self.current_token = TypeDefinitionToken(typedef)
+            self.current_token = TypeDefinitionToken(self.mark, typedef)
             self.reader.forward(len(line))
         else:
             raise TokenizerError("Incorrect type definition")
 
     def fetch_string(self, word: bytes) -> None:
-        self.current_token = StringToken(word)
+        self.current_token = StringToken(self.mark, word)
         self.reader.forward(len(word) - 1)
 
+    def fetch_quoted_string(self) -> None:
+        word = self.reader.copy_to_end_of_line().strip()
+        last_quot_pos = word.rfind(b"'")
+        s = word[1:last_quot_pos]
+        self.current_token = StringToken(self.mark, s)
+        self.reader.forward(last_quot_pos)
+
     def fetch_scalar_sequence_start(self) -> None:
-        self.current_token = ScalarSequenceStartToken()
+        self.current_token = ScalarSequenceStartToken(self.mark)
 
     def fetch_scalar_sequence_end(self) -> None:
-        self.current_token = ScalarSequenceEndToken()
+        self.current_token = ScalarSequenceEndToken(self.mark)
 
     def fetch_identifier_sequence_start(self) -> None:
-        self.current_token = IdentifierSequenceStartToken()
+        self.current_token = IdentifierSequenceStartToken(self.mark)
 
     def fetch_identifier_sequence_end(self) -> None:
-        self.current_token = IdentifierSequenceEndToken()
+        self.current_token = IdentifierSequenceEndToken(self.mark)
 
     def fetch_item_sequence_start(self) -> None:
-        self.current_token = ItemSequenceStartToken()
+        self.current_token = ItemSequenceStartToken(self.mark)
 
     def fetch_item_sequence_end(self) -> None:
-        self.current_token = ItemSequenceEndToken()
+        self.current_token = ItemSequenceEndToken(self.mark)
 
     def fetch_item(self) -> None:
-        self.current_token = ItemToken()
+        self.current_token = ItemToken(self.mark)
         self.reader.forward(3)
 
     def fetch_identifier(self, word: bytes) -> None:
-        self.current_token = IdentifierToken(word)
+        self.current_token = IdentifierToken(self.mark, word)
         self.reader.forward(len(word) - 1)
 
     def fetch_binary_sequence_start(self) -> None:
-        self.current_token = BinarySequenceStartToken()
+        self.current_token = BinarySequenceStartToken(self.mark)
 
     def fetch_binary_sequence_end(self) -> None:
-        self.current_token = BinarySequenceEndToken()
+        self.current_token = BinarySequenceEndToken(self.mark)
 
     def fetch_assignment(self) -> None:
-        self.current_token = AssignmentToken()
+        self.current_token = AssignmentToken(self.mark)
 
     def fetch_block_end(self) -> None:
-        self.current_token = EndOfBlockToken()
+        self.current_token = EndOfBlockToken(self.mark)
         self.reader.forward(2)
 
     def fetch_sequence_entry(self) -> None:
-        self.current_token = SequenceEntryToken()
+        self.current_token = SequenceEntryToken(self.mark)
 
     def fetch_number(self, word: bytes) -> None:
-        self.current_token = NumberToken(word)
+        self.current_token = NumberToken(self.mark, word)
         self.reader.forward(len(word) - 1)
 
     def fetch_end_of_file(self):
-        self.current_token = EndOfFileToken()
+        self.current_token = EndOfFileToken(self.mark)
         self.done = True

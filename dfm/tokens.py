@@ -1,8 +1,9 @@
 class Token(object):
     id = 'GENERIC_TOKEN'
 
-    def __init__(self):
-        self.value = ""
+    def __init__(self, mark, value=""):
+        self.value = value
+        self.mark = mark
 
     def __repr__(self):
         if self.value != "":
@@ -18,8 +19,9 @@ class ObjectToken(Token):
 class TypeDefinitionToken(Token):
     id = "TYPEDEF"
 
-    def __init__(self, value):
+    def __init__(self, mark, value):
         self.value = value.decode("utf-8")
+        self.mark = mark
 
 
 class AssignmentToken(Token):
@@ -81,21 +83,23 @@ class ValueToken(Token):
 class ScalarToken(ValueToken):
     id = "SCALAR"
 
-    def __init__(self, value):
+    def __init__(self, mark, value):
         self.value = value
+        self.mark = mark
 
 
 class IdentifierToken(ValueToken):
     id = "IDENTIFIER"
 
-    def __init__(self, value):
+    def __init__(self, mark, value):
         self.value = value.decode("utf-8")
+        self.mark = mark
 
 
 class NumberToken(ValueToken):
     id = "NUMBER"
 
-    def __init__(self, value):
+    def __init__(self, mark, value):
         try:
             self.value = int(value)
         except ValueError:
@@ -105,8 +109,9 @@ class NumberToken(ValueToken):
 class StringToken(ValueToken):
     id = "STRING"
 
-    def __init__(self, value):
+    def __init__(self, mark, value):
         self.value = value.decode("utf-8")
+        self.mark = mark
 
 
 class EndOfFileToken(Token):

@@ -287,17 +287,49 @@ class TestParser(unittest.TestCase):
                 EndOfFileEvent],
             data)
 
-    @unittest.skip("not implemented yet")
     def test_parse_object_with_omitted_type_definition(self):
-        self.fail("not implemented yet")
+        data = b"object foo\r\n  prop1 = val1\r\nend"
+        p = Parser(data)
+        for i in range(2):
+            p.get_event()
+        evt = p.get_event()
+        self.assertEqual(p.state, p.parse_object_content)
+        self.assertEqual(evt.value, "")
 
-    @unittest.skip("not implemented yet")
+    def test_parse_object_with_omitted_type_definition_and_nested_object(self):
+        data = b"object foo\r\n  object obj: t1\r\n    prop1 = val1\r\n  end\r\nend"
+        p = Parser(data)
+        for i in range(2):
+            p.get_event()
+        evt = p.get_event()
+        self.assertEqual(p.state, p.parse_object_content)
+        self.assertEqual(evt.value, "")
+
     def test_parse_empty_object_with_omitted_type_definition(self):
-        self.fail("not implemented yet")
+        self.check_event_sequence(
+            [
+                ObjectEvent,
+                ObjectNameEvent,
+                ObjectTypeEvent,
+                EndOfBlockEvent,
+                EndOfFileEvent],
+            b"object foo: bar\r\nend")
 
-    @unittest.skip("not implemented yet")
     def test_parse_object_with_no_end(self):
-        self.fail("not implemented yet")
+        data = b"object foo: bar\r\n  p = v\r\n"
+        p = Parser(data)
+        for i in range(5):
+            p.get_event()
+        self.assertRaises(ParserError, p.get_event)
+
+    def test_parse_property_with_quoted_string_value(self):
+        data = b"object foo: bar\r\n  propertyName = 'quoted value'\r\nend"
+        p = Parser(data)
+        for i in range(4):
+            p.get_event()
+        evt = p.get_event()
+        self.assertIsInstance(evt, ValueEvent)
+        self.assertEqual(evt.value, "quoted value")
 
     @unittest.skip("not implemented yet")
     def test_parse_item(self):

@@ -1,3 +1,6 @@
+from .mark import Mark
+
+
 class ReaderError(Exception):
     pass
 
@@ -9,6 +12,7 @@ class Reader(object):
         self.stream = input_data + b"\0"
         self.line = 0
         self.pointer = 0
+        self.index = 0
         self.eof = (self.pointer >= len(input_data))
 
     def forward(self, length=1) -> None:
@@ -18,8 +22,10 @@ class Reader(object):
             raise ReaderError("Out of range")
         while length:
             self.pointer += 1
+            self.index += 1
             if chr(self.stream[self.pointer]) == "\n":
                 self.line += 1
+                self.index = 0
             if (self.pointer + 1) == len(self.stream):
                 self.eof = True
             length -= 1
@@ -45,3 +51,6 @@ class Reader(object):
         if length > 0:
             return self.get_chunk(length)
         return b""
+
+    def get_mark(self):
+        return Mark(self.index, self.line)

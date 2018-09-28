@@ -58,6 +58,12 @@ class TestTokenizer(unittest.TestCase):
         self.assertEqual(token.id, "STRING")
         self.assertEqual(token.value, "@1SomeThing")
 
+    def test_detect_quoted_string_token(self):
+        data = b"'here goes quoted string' do_not_copy_this"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "here goes quoted string")
+
     def test_detect_assignment_token(self):
         data = b" = value"
         t = Tokenizer(data)
