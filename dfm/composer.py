@@ -1,4 +1,3 @@
-from .nodes import *
 from .events import *
 from .parser import Parser
 from typing import Dict, List
@@ -37,17 +36,19 @@ class Composer:
         node["type"] = type_event.value
         # обязательные поля заполнены, обрабатываем все остальные
         while not self.parser.check_event(EndOfBlockEvent):
-            event = self.parser.peek_event()
-            print(event)
             if self.parser.check_event(PropertyNameEvent):
-                node[event.value] = self.compose_property_node()
+                property_name = self.parser.peek_event().value
+                node[property_name] = self.compose_property_node()
             elif self.parser.check_event(ObjectEvent):
                 # если нашли вложенный объект, то сначала полностью его формируем
                 # затем достаём его имя и под этим именем записываем
                 object_node = self.compose_object_node()
                 node[object_node.name] = object_node
             else:
+                print(self.parser.current_event)
                 raise ComposerError("Cannot compose object node")
+            #self.parser.get_event()
+        self.parser.get_event()
         return node
 
     def compose_property_node(self):
@@ -55,12 +56,12 @@ class Composer:
         Формирует значение именованного свойства объекта или item'а.
         Значением свойства может быть список или атомарное значение.
         """
-        event = self.parser.get_event()
+        self.parser.get_event()
         if self.parser.check_event(SequenceStartEvent):
             node = self.compose_sequence_node()
         elif self.parser.check_event(ValueEvent):
-            node = event.value
-        self.parser.get_event()
+            node = self.parser.peek_event().value
+            self.parser.get_event()
         return node
 
     def compose_sequence_node(self) -> List:
@@ -70,14 +71,15 @@ class Composer:
         проверок здесь нет.
         """
         node = []
-        event = self.parser.get_event()
+        self.parser.get_event()
         while not self.parser.check_event(SequenceEndEvent):
             if self.parser.check_event(ItemEvent):
                 inner_node = self.compose_item_node()
             if self.parser.check_event(ValueEvent):
-                inner_node = event.value
+                inner_node = self.parser.peek_event().value
+                self.parser.get_event()
             node.append(inner_node)
-            event = self.parser.get_event()
+        self.parser.get_event()
         return node
 
     def compose_item_node(self) -> Dict:
@@ -87,9 +89,10 @@ class Composer:
         вложенные объекты и item'ы, только именованные свойства.
         """
         node = {}
-        event = self.parser.get_event()
+        self.parser.get_event()
         while not self.parser.check_event(EndOfBlockEvent):
             if self.parser.check_event(PropertyNameEvent):
-                node[event.value] = self.compose_property_node()
-            event = self.parser.get_event()
+                property_name = self.parser.peek_event().value
+                node[property_name] = self.compose_property_node()
+        self.parser.get_event()
         return node
