@@ -18,6 +18,9 @@ class Tokenizer(object):
     # допускаются только цифры (и точка, если это дробь)
     # запрещены ведущие нули
     number_pattern = re.compile(b"^-?[1-9]\d*$|^-?[1-9]\d*\.\d+|^0$")
+    # регулярка для проверки двоичных данных
+    # 32 байта шестнадцатиричных чисел
+    hexcode_pattern = re.compile(b"[\dA-F]{64}")
 
     def __init__(self, data):
         self.done = False
@@ -80,6 +83,9 @@ class Tokenizer(object):
     def check_valid_identifier(self, word: bytes) -> bool:
         return self.identifier_pattern.match(word) is not None
 
+    def check_valid_hexcode(self, word: bytes) ->bool:
+        return self.hexcode_pattern.match(word) is not None
+
     def fetch_next_token(self) -> None:
         self.move_to_next_token()
         ch = chr(self.reader.peek())
@@ -137,6 +143,8 @@ class Tokenizer(object):
             return self.fetch_item()
         if word == b"end":
             return self.fetch_block_end()
+        if self.check_valid_hexcode(word):
+            return self.fetch_binary_data(word)
         if self.check_valid_number(word):
             return self.fetch_number(word)
         if self.check_valid_identifier(word):
@@ -169,7 +177,7 @@ class Tokenizer(object):
         word = self.reader.copy_to_end_of_line().strip()
         last_quot_pos = word.rfind(b"'")
         s = word[1:last_quot_pos]
-        self.current_token = StringToken(self.mark, s)
+        self.current_token = QuotedStringToken(self.mark, s)
         self.reader.forward(last_quot_pos)
 
     def fetch_scalar_sequence_start(self) -> None:
@@ -212,10 +220,16 @@ class Tokenizer(object):
         self.reader.forward(2)
 
     def fetch_sequence_entry(self) -> None:
-        self.current_token = SequenceEntryToken(self.mark)
+        self.current_token = CommaToken(self.mark)
 
     def fetch_number(self, word: bytes) -> None:
         self.current_token = NumberToken(self.mark, word)
+        self.reader.forward(len(word) - 1)
+
+    def fetch_binary_data(self, word: bytes) -> None:
+        # костыль для тестирования боевых компонентов
+        # self.current_token = BinaryDataToken(self.mark, word)
+        self.current_token = BinaryDataToken(self.mark, [int(d, 16) for d in word.decode("utf-8")])
         self.reader.forward(len(word) - 1)
 
     def fetch_end_of_file(self):

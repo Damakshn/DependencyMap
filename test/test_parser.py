@@ -1,7 +1,3 @@
-"""
-Тесты должны проверять обработку различных типовых конструкций формата,
-а также выдавать правильные сообщения об ошибках в тех случаях, когда представлены некорректные данные.
-"""
 import unittest
 from dfm.parser import Parser, ParserError
 from dfm.tokenizer import Tokenizer
@@ -142,12 +138,10 @@ class TestParser(unittest.TestCase):
             PropertyNameEvent,
             IdentifierSequenceStartEvent,
             ValueEvent,
-            SequenceEntryEvent,
             ValueEvent,
-            SequenceEntryEvent,
             ValueEvent,
             IdentifierSequenceEndEvent]
-        values = ["someProperty", None, "qw", None, "er", None, "ty", None]
+        values = ["someProperty", None, "qw", "er", "ty", None]
         self.check_events_for_parsing_sequences(events, values, data)
 
     def test_parse_object_property_with_scalar_sequence_value(self):
@@ -162,9 +156,16 @@ class TestParser(unittest.TestCase):
         values = ["someProperty", None, 12, 13, 14, None]
         self.check_events_for_parsing_sequences(events, values, data)
 
-    @unittest.skip("not implemented yet")
-    def test_parse_object_property_with_binary_sequence_value(self):
-        self.fail("not implemented yet")
+    def test_parse_property_with_binary_sequence_value(self):
+        data = b"property = {\r\n3333333333337733333333333330033333333333333773333333333333003333}"
+        fixture = [int(d, 16) for d in "3333333333337733333333333330033333333333333773333333333333003333"]
+        p = Parser(data)
+        p.state = p.parse_item
+        for i in range(2):
+            p.get_event()
+        event = p.get_event()
+        self.assertIsInstance(event, BinaryDataEvent)
+        self.assertEqual(event.value, fixture)
 
     def test_parse_object_property_with_item_sequence_value(self):
         data = b"someProperty = <\r\nitem\r\nprop1 = 1\r\nend\r\nitem\r\nprop2 = foo\r\nend>"
@@ -183,17 +184,28 @@ class TestParser(unittest.TestCase):
         values = ["someProperty", None, None, "prop1", 1, None, None, "prop2", "foo", None, None]
         self.check_events_for_parsing_sequences(events, values, data)
 
-    @unittest.skip("not implemented yet")
     def test_binary_sequence_not_closed(self):
-        self.fail("not implemented yet")
+        data = b"property = {\r\n3333333333337733333333333330033333333333333773333333333333003333\r\n  anotherProperty = 1"
+        p = Parser(data)
+        p.state = p.parse_item
+        for i in range(3):
+            p.get_event()
+        self.assertRaises(ParserError, p.get_event)
 
-    @unittest.skip("not implemented yet")
     def test_scalar_sequence_not_closed(self):
-        self.fail("not implemented yet")
+        data = b"property = (\r\n1\r\n2\r\nanotherProperty = [a,b,c]"
+        p = Parser(data)
+        p.state = p.parse_item
+        for i in range(4):
+            p.get_event()
+        self.assertRaises(ParserError, p.get_event)
 
-    @unittest.skip("not implemented yet")
     def test_identifier_sequence_not_closed(self):
-        self.fail("not implemented yet")
+        data = b"object foo: bar\r\n  property=[qw, er, ty\r\n  property2 = 2\r\nend"
+        p = Parser(data)
+        for i in range(8):
+            p.get_event()
+        self.assertRaises(ParserError, p.get_event)
 
     def test_item_sequence_not_closed(self):
         # незакрытая последовательность item'ов вызывает ошибку
@@ -207,13 +219,13 @@ class TestParser(unittest.TestCase):
             p.get_event()
         self.assertRaises(ParserError, p.get_event)
 
-    @unittest.skip("not implemented yet")
-    def test_sequence_with_open_bracket(self):
-        self.fail("not implemented yet")
-
-    @unittest.skip("not implemented yet")
     def test_identifier_sequence_no_comma(self):
-        self.fail("not implemented yet")
+        data = b"property = [a b c]"
+        p = Parser(data)
+        p.state = p.parse_item
+        for i in range(3):
+            p.get_event()
+        self.assertRaises(ParserError, p.get_event)
 
     def test_comma_in_non_identifier_sequence(self):
         data = b"= (1,2,3)"
@@ -232,7 +244,6 @@ class TestParser(unittest.TestCase):
         values = ["someProperty", None, None]
         self.check_events_for_parsing_sequences(events, values, data)
 
-    @unittest.skip("not implemented yet")
     def test_parse_empty_binary_sequence(self):
         data = b"someProperty = {}"
         events = [
@@ -331,14 +342,27 @@ class TestParser(unittest.TestCase):
         self.assertIsInstance(evt, ValueEvent)
         self.assertEqual(evt.value, "quoted value")
 
-    @unittest.skip("not implemented yet")
     def test_parse_item(self):
-        self.fail("not implemented yet")
+        data = b"item\r\n  prop1 = 1\r\n  prop2 = [qw,er,ty]\r\nend"
+        p = Parser(data)
+        p.state = p.parse_item_sequence
+        event = p.get_event()
+        self.assertIsInstance(event, ItemEvent)
+        event = p.get_event()
+        self.assertIsInstance(event, PropertyNameEvent)
+        self.assertEqual(event.value, "prop1")
+        event = p.get_event()
+        self.assertIsInstance(event, ValueEvent)
+        self.assertEqual(event.value, 1)
+        for i in range(6):
+            p.get_event()
+        event = p.get_event()
+        self.assertIsInstance(event, EndOfBlockEvent)
 
-    @unittest.skip("not implemented yet")
     def test_parse_item_with_no_end(self):
-        self.fail("not implemented yet")
-
-    @unittest.skip("not implemented yet")
-    def test_state_transition(self):
-        self.fail("not implemented yet")
+        data = b"item\r\n  prop1 = 1\r\n  prop2 = 2\r\nitem\r\n  prop3 = 3\r\n  prop4 = 4\r\nend"
+        p = Parser(data)
+        p.state = p.parse_item_sequence
+        for i in range(5):
+            p.get_event()
+        self.assertRaises(ParserError, p.get_event)

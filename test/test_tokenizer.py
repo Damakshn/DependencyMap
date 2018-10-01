@@ -5,6 +5,9 @@ from dfm.tokenizer import Tokenizer, TokenizerError
 class TestTokenizer(unittest.TestCase):
 
     def check_sequence(self, fixture, sequence):
+        """
+        Извлекает все токены из sequence, а затем сверяет их с fixture.
+        """
         t = Tokenizer(sequence)
         tokens = []
         while t.has_tokens():
@@ -22,8 +25,6 @@ class TestTokenizer(unittest.TestCase):
         word = t.fetch_word()
         self.assertEqual(word, b"wordToFetch123")
 
-# Тестируем распознавание отдельных токенов
-# (используем корректные данные)
     def test_detect_object_token(self):
         data = b"\n  object someObject: objClass"
         t = Tokenizer(data)
@@ -169,6 +170,11 @@ class TestTokenizer(unittest.TestCase):
         self.check_sequence(
             ["(", 1, 2, 3, ")", "END_FILE"],
             b"(\r\n1\r\n2\r\n3)")
+
+    def test_detect_binary_sequenct(self):
+        fixture = [int(d, 16) for d in "BD00BDBDBD00BDBDBD00D68C6B00FFDED600FFFFFF00FFFFFF00FFF7EF00FFFF"]
+        self.check_sequence(["{", fixture, "}", "END_FILE"],
+            b"{\r\nBD00BDBDBD00BDBDBD00D68C6B00FFDED600FFFFFF00FFFFFF00FFF7EF00FFFF}")
 
     def test_detect_empty_scalar_sequence(self):
         self.check_sequence(

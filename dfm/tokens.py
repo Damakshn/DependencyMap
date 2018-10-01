@@ -72,7 +72,7 @@ class EndOfBlockToken(Token):
     id = "END_BLOCK"
 
 
-class SequenceEntryToken(Token):
+class CommaToken(Token):
     id = ","
 
 
@@ -100,6 +100,7 @@ class NumberToken(ValueToken):
     id = "NUMBER"
 
     def __init__(self, mark, value):
+        self.mark = mark
         try:
             self.value = int(value)
         except ValueError:
@@ -111,6 +112,24 @@ class StringToken(ValueToken):
 
     def __init__(self, mark, value):
         self.value = value.decode("utf-8")
+        self.mark = mark
+
+
+class QuotedStringToken(ValueToken):
+    id = "QUOTED STRING"
+
+    def __init__(self, mark, value):
+        self.value = value.decode("utf-8")
+        self.mark = mark
+
+
+class BinaryDataToken(Token):
+    id = "BINARY DATA"
+
+    def __init__(self, mark, value):
+        # костыль для тестирования боевых компонентов
+        # self.value = value.decode("utf-8")
+        self.value = value
         self.mark = mark
 
 

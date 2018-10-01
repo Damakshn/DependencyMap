@@ -12,6 +12,10 @@ class BinarySequenceEndEvent(Event):
     pass
 
 
+class BinaryDataEvent(Event):
+    pass
+
+
 class ScalarSequenceStartEvent(Event):
     pass
 

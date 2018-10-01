@@ -64,9 +64,11 @@ class Parser(object):
             "parse_object_content": "property name, object or 'end'",
             "parse_property_value": "property value",
             "parse_item": "property name or 'end'",
-            "parse_scalar_sequence": "number or ')'",
-            "parse_identifier_sequence": "identifier, ',' or ']'",
-            "parse_item_sequence": "item, or '>'"
+            "parse_scalar_sequence": "number, quoted string or ')'",
+            "parse_identifier_sequence": "sequence entry or ']'",
+            "parse_identifier_sequence_first_entry": "identifier of ']'",
+            "parse_item_sequence": "item, or '>'",
+            "parse_binary_sequence": "hexcode or '}"
         }
         func_name = stack()[1][3]
         expected = dict_of_allowed_tokens[func_name]
@@ -207,7 +209,7 @@ class Parser(object):
         token = self.tokenizer.get_next_token()
         if not self.tokenizer.check_token(AssignmentToken):
             template = "Expected {}, but found {} at line {}, column {}"
-            message = template.format("'='", token, token.mark.line, token.mark.pos)
+            message = template.format("'='", token, token.mark.line+1, token.mark.pos+1)
             raise ParserError(message)
         token = self.tokenizer.get_next_token()
         if self.tokenizer.check_token(BinarySequenceStartToken):
@@ -217,7 +219,7 @@ class Parser(object):
             self.state = self.parse_scalar_sequence
             return ScalarSequenceStartEvent()
         if self.tokenizer.check_token(IdentifierSequenceStartToken):
-            self.state = self.parse_identifier_sequence
+            self.state = self.parse_identifier_sequence_first_entry
             return IdentifierSequenceStartEvent()
         if self.tokenizer.check_token(ItemSequenceStartToken):
             self.state = self.parse_item_sequence
@@ -255,27 +257,40 @@ class Parser(object):
         Для остальных токенов генерирует исключение.
         """
         token = self.tokenizer.get_next_token()
-        if self.tokenizer.check_token(ValueToken):
+        if self.tokenizer.check_token(QuotedStringToken, NumberToken):
             self.state = self.parse_scalar_sequence
             return ValueEvent(token.value)
         if self.tokenizer.check_token(ScalarSequenceEndToken):
             self.move_to_previous_state()
             return ScalarSequenceEndEvent()
-        if self.tokenizer.check_token(SequenceEntryToken):
+        if self.tokenizer.check_token(CommaToken):
             raise ParserError("Commas are not allowed in scalar sequences.")
         raise ParserError(self.make_err_message_for_function(token))
 
     def parse_identifier_sequence(self) -> Event:
         """
         Разбирает последовательность в квадратных скобках.
-        Ожидает найти идентификатор, запятую или ']'
+        Ожидает найти запятую и за ней идентификатор или ']'
         Для остальных токенов генерирует исключение.
         """
         token = self.tokenizer.get_next_token()
+        if self.tokenizer.check_token(IdentifierSequenceEndToken):
+            self.move_to_previous_state()
+            return IdentifierSequenceEndEvent()
+        if not self.tokenizer.check_token(CommaToken):
+            msg = "Expected {}, but {} found at line {}, symbol {}"
+            raise ParserError(msg.format("','", token, token.mark.line+1, token.mark.pos+1))
+        token = self.tokenizer.get_next_token()
         if self.tokenizer.check_token(IdentifierToken):
+            self.state = self.parse_identifier_sequence
             return ValueEvent(token.value)
-        if self.tokenizer.check_token(SequenceEntryToken):
-            return SequenceEntryEvent()
+        raise ParserError(self.make_err_message_for_function(token))
+
+    def parse_identifier_sequence_first_entry(self) -> Event:
+        token = self.tokenizer.get_next_token()
+        if self.tokenizer.check_token(IdentifierToken):
+            self.state = self.parse_identifier_sequence
+            return ValueEvent(token.value)
         if self.tokenizer.check_token(IdentifierSequenceEndToken):
             self.move_to_previous_state()
             return IdentifierSequenceEndEvent()
@@ -298,4 +313,10 @@ class Parser(object):
         raise ParserError(self.make_err_message_for_function(token))
 
     def parse_binary_sequence(self) -> Event:
-        raise ParserError("Not implemented yet.")
+        token = self.tokenizer.get_next_token()
+        if self.tokenizer.check_token(BinaryDataToken):
+            return BinaryDataEvent(token.value)
+        if self.tokenizer.check_token(BinarySequenceEndToken):
+            self.state = self.states.pop()
+            return BinarySequenceEndEvent()
+        raise ParserError(self.make_err_message_for_function(token))
