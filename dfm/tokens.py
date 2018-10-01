@@ -1,4 +1,4 @@
-class Token(object):
+class Token:
     id = 'GENERIC_TOKEN'
 
     def __init__(self, mark, value=""):

@@ -7,7 +7,7 @@ class TokenizerError(Exception):
     pass
 
 
-class Tokenizer(object):
+class Tokenizer:
     # регулярка для проверки идентификаторов
     # правильный идентификатор содержит английские и
     # русские буквы любого регистра, цифры, _ и не может начинаться с цифры
@@ -29,7 +29,7 @@ class Tokenizer(object):
         self.reader = Reader(data)
         self.mark = None
 
-    def has_tokens(self):
+    def has_tokens(self) -> bool:
         return not self.done
 
     def check_token(self, *choices) -> bool:
@@ -83,7 +83,7 @@ class Tokenizer(object):
     def check_valid_identifier(self, word: bytes) -> bool:
         return self.identifier_pattern.match(word) is not None
 
-    def check_valid_hexcode(self, word: bytes) ->bool:
+    def check_valid_hexcode(self, word: bytes) -> bool:
         return self.hexcode_pattern.match(word) is not None
 
     def fetch_next_token(self) -> None:
@@ -232,6 +232,6 @@ class Tokenizer(object):
         self.current_token = BinaryDataToken(self.mark, [int(d, 16) for d in word.decode("utf-8")])
         self.reader.forward(len(word) - 1)
 
-    def fetch_end_of_file(self):
+    def fetch_end_of_file(self) -> None:
         self.current_token = EndOfFileToken(self.mark)
         self.done = True

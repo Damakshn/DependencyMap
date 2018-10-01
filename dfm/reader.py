@@ -5,7 +5,7 @@ class ReaderError(Exception):
     pass
 
 
-class Reader(object):
+class Reader:
 
     def __init__(self, input_data):
         # нуль-символ как маркер конца файла

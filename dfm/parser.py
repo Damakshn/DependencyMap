@@ -20,7 +20,9 @@
 происходит переход в предыдущее состояние.
 
 Стек состояний
-self.states хранит стек состояний парсера
+self.states хранит стек состояний парсера. Поскольку после окончания разбора свойства и его значения неизвестно, в какое состояние
+нужно перейти - разбор оъекта или разбор item'а, историю входа в эти состояния нужно где-то хранить. Состояния разбора последовательностей
+в стек не пишутся, так как формат не предусматривает вложенных последовательностей.
 """
 
 from .events import *
@@ -33,7 +35,7 @@ class ParserError(Exception):
     pass
 
 
-class Parser(object):
+class Parser:
 
     def __init__(self, data):
         # обработчик состояния
@@ -75,7 +77,7 @@ class Parser(object):
         template = "Expected {}, but found {} at line {}, symbol {}"
         return template.format(expected, token, token.mark.line+1, token.mark.pos+1)
 
-    def move_to_previous_state(self):
+    def move_to_previous_state(self) -> None:
         """
         Делает текущим последнее состояние в стеке, удаляя его оттуда.
         Если таким образом произошёл переход в состояние разбора

@@ -1,34 +1,38 @@
-class Event(object):
+class Event:
 
     def __init__(self, value=None):
         self.value = value
 
 
-class BinarySequenceStartEvent(Event):
+class SequenceStartEvent(Event):
     pass
 
 
-class BinarySequenceEndEvent(Event):
+class SequenceEndEvent(Event):
     pass
 
 
-class BinaryDataEvent(Event):
+class BinarySequenceStartEvent(SequenceStartEvent):
     pass
 
 
-class ScalarSequenceStartEvent(Event):
+class BinarySequenceEndEvent(SequenceEndEvent):
     pass
 
 
-class ScalarSequenceEndEvent(Event):
+class ScalarSequenceStartEvent(SequenceStartEvent):
     pass
 
 
-class IdentifierSequenceStartEvent(Event):
+class ScalarSequenceEndEvent(SequenceEndEvent):
     pass
 
 
-class IdentifierSequenceEndEvent(Event):
+class IdentifierSequenceStartEvent(SequenceStartEvent):
+    pass
+
+
+class IdentifierSequenceEndEvent(SequenceEndEvent):
     pass
 
 
@@ -36,11 +40,11 @@ class SequenceEntryEvent(Event):
     pass
 
 
-class ItemSequenceStartEvent(Event):
+class ItemSequenceStartEvent(SequenceStartEvent):
     pass
 
 
-class ItemSequenceEndEvent(Event):
+class ItemSequenceEndEvent(SequenceEndEvent):
     pass
 
 
@@ -61,7 +65,9 @@ class ObjectNameEvent(Event):
 
 
 class PropertyNameEvent(Event):
-    pass
+
+    def __repr__(self):
+        return "PropertyNameEvent (" + self.value + ')'
 
 
 class ObjectTypeEvent(Event):
@@ -73,4 +79,8 @@ class EndOfFileEvent(Event):
 
 
 class ValueEvent(Event):
+    pass
+
+
+class BinaryDataEvent(ValueEvent):
     pass

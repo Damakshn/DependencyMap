@@ -1,4 +1,4 @@
-class Mark(object):
+class Mark:
 
     def __init__(self, position, line):
         self.pos = position
