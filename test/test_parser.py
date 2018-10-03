@@ -132,6 +132,16 @@ class TestParser(unittest.TestCase):
         self.assertTrue(isinstance(evt, ValueEvent))
         self.assertEqual(evt.value, 983)
 
+    def test_parse_property_with_boolean_value(self):
+        data = b"booleanProperty = False"
+        p = Parser(data)
+        p.state = p.parse_item
+        p.get_event()
+        event = p.get_event()
+        self.assertIsInstance(event, ValueEvent)
+        self.assertEqual(event.value, False)
+
+
     def test_parse_object_property_with_identifier_sequence_value(self):        
         data = b"someProperty = [qw, er, ty]"
         events = [

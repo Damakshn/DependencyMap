@@ -40,14 +40,13 @@ class Composer:
                 property_name = self.parser.peek_event().value
                 node[property_name] = self.compose_property_node()
             elif self.parser.check_event(ObjectEvent):
+                self.parser.get_event()
                 # если нашли вложенный объект, то сначала полностью его формируем
                 # затем достаём его имя и под этим именем записываем
                 object_node = self.compose_object_node()
-                node[object_node.name] = object_node
+                node[object_node["name"]] = object_node
             else:
-                print(self.parser.current_event)
                 raise ComposerError("Cannot compose object node")
-            #self.parser.get_event()
         self.parser.get_event()
         return node
 

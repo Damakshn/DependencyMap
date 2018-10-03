@@ -59,11 +59,31 @@ class TestTokenizer(unittest.TestCase):
         self.assertEqual(token.id, "STRING")
         self.assertEqual(token.value, "@1SomeThing")
 
+    def test_detect_boolean_token(self):
+        data = b"False"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.id, "BOOLEAN")
+        self.assertEqual(token.value, False)
+
     def test_detect_quoted_string_token(self):
-        data = b"'here goes quoted string' do_not_copy_this"
+        data = b"'here goes quoted string'"
         t = Tokenizer(data)
         token = t.get_next_token()
         self.assertEqual(token.value, "here goes quoted string")
+
+    def test_detect_string_with_russian_letters(self):
+        data = b"#1040 #1089#1084#1099#1089#1083'?'"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "А смысл?")
+
+    def test_detect_splitted_string_with_russian_letters(self):
+        data = b"#1063#1077#1084 #1073#1086#1083#1100#1096#1077 #1089#1080#1083#1072, #1090 +\r\n\
+    #1077#1084 #1073#1086#1083#1100#1096#1077 #1086#1090#1074#1077#1090#1089#1090#1074#1077#1085#1085#1086#1089#1090#1100'.'"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "Чем больше сила, тем больше ответственность.")
 
     def test_detect_assignment_token(self):
         data = b" = value"

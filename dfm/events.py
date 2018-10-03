@@ -3,6 +3,9 @@ class Event:
     def __init__(self, value=None):
         self.value = value
 
+    def __repr__(self):
+        return self.__class__.__name__
+
 
 class SequenceStartEvent(Event):
     pass
@@ -79,8 +82,12 @@ class EndOfFileEvent(Event):
 
 
 class ValueEvent(Event):
-    pass
+
+    def __repr__(self):
+        return "ValueEvent (" + str(self.value) + ')'
 
 
 class BinaryDataEvent(ValueEvent):
-    pass
+
+    def __repr__(self):
+        return "BinaryDataEvent (" + str(self.value) + ')'

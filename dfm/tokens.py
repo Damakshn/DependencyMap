@@ -20,7 +20,7 @@ class TypeDefinitionToken(Token):
     id = "TYPEDEF"
 
     def __init__(self, mark, value):
-        self.value = value.decode("utf-8")
+        self.value = value
         self.mark = mark
 
 
@@ -92,7 +92,7 @@ class IdentifierToken(ValueToken):
     id = "IDENTIFIER"
 
     def __init__(self, mark, value):
-        self.value = value.decode("utf-8")
+        self.value = value
         self.mark = mark
 
 
@@ -111,7 +111,15 @@ class StringToken(ValueToken):
     id = "STRING"
 
     def __init__(self, mark, value):
-        self.value = value.decode("utf-8")
+        self.value = value
+        self.mark = mark
+
+
+class BooleanToken(ValueToken):
+    id = "BOOLEAN"
+
+    def __init__(self, mark, value):
+        self.value = value
         self.mark = mark
 
 
@@ -119,7 +127,7 @@ class QuotedStringToken(ValueToken):
     id = "QUOTED STRING"
 
     def __init__(self, mark, value):
-        self.value = value.decode("utf-8")
+        self.value = value
         self.mark = mark
 
 

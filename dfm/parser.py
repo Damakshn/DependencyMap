@@ -246,7 +246,6 @@ class Parser:
         if self.tokenizer.check_token(EndOfBlockToken):
             self.move_to_previous_state()
             return EndOfBlockEvent()
-        print(self.states)
         raise ParserError(self.make_err_message_for_function(token))
 
     def parse_quoted_string(self) -> Event:
@@ -319,6 +318,6 @@ class Parser:
         if self.tokenizer.check_token(BinaryDataToken):
             return BinaryDataEvent(token.value)
         if self.tokenizer.check_token(BinarySequenceEndToken):
-            self.state = self.states.pop()
+            self.move_to_previous_state()
             return BinarySequenceEndEvent()
         raise ParserError(self.make_err_message_for_function(token))
