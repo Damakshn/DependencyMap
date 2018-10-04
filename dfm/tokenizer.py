@@ -236,13 +236,6 @@ class Tokenizer:
                     res.append(chr(byte))
         return "".join(res)
 
-    def fetch_quoted_string(self) -> None:
-        word = self.reader.copy_to_end_of_line().strip()
-        last_quot_pos = word.rfind(b"'")
-        s = word[1:last_quot_pos]
-        self.current_token = QuotedStringToken(self.mark, s.decode("utf-8"))
-        self.reader.forward(last_quot_pos)
-
     def fetch_line(self) -> None:
         """
         Достаёт строку из многострочного текста.
