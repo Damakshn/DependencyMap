@@ -7,6 +7,10 @@ class ComposerError(Exception):
     pass
 
 
+"""
+Класс, использующий парсер, чтобы прочитать файл, сформировать из полученных событий
+структуры данных и скомпоновать их так, чтобы воспроизвести структуру исходного файла.
+"""
 class Composer:
 
     def __init__(self, data):
@@ -38,6 +42,8 @@ class Composer:
         while not self.parser.check_event(EndOfBlockEvent):
             if self.parser.check_event(PropertyNameEvent):
                 property_name = self.parser.peek_event().value
+                if property_name in node:
+                    raise ComposerError("Field " + property_name + " already exists in object.")
                 node[property_name] = self.compose_property_node()
             elif self.parser.check_event(ObjectEvent):
                 self.parser.get_event()
@@ -92,6 +98,8 @@ class Composer:
         while not self.parser.check_event(EndOfBlockEvent):
             if self.parser.check_event(PropertyNameEvent):
                 property_name = self.parser.peek_event().value
+                if property_name in node:
+                    raise ComposerError("Field " + property_name + " already exists in item.")
                 node[property_name] = self.compose_property_node()
         self.parser.get_event()
         return node

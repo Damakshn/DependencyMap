@@ -23,6 +23,35 @@
 self.states хранит стек состояний парсера. Поскольку после окончания разбора свойства и его значения неизвестно, в какое состояние
 нужно перейти - разбор оъекта или разбор item'а, историю входа в эти состояния нужно где-то хранить. Состояния разбора последовательностей
 в стек не пишутся, так как формат не предусматривает вложенных последовательностей.
+
+Описание разбираемой грамматики (приблизительное):
+file ::= object
+
+object ::= 'object' NAME[: object_type] NEWLINE INDENT object_content end NEWLINE 
+
+object_type ::= NAME
+
+object_content ::= object* | property*
+
+property ::= simple_property | complex_property 
+
+simple_property ::= NAME = scalar_value NEWLINE
+
+complex_property ::= NAME '=' complex_value NEWLINE
+
+scalar_value ::= SCALAR 
+
+complex_value ::= sequence | square_sequence | triangle_sequence | strings
+
+sequence ::= '(' [NEWLINE scalar_value]* ')'
+
+strings ::= '(' [NEWLINE scalar_value][ '+' ]* | [NEWLINE scalar_value]* ')'
+
+square_sequence ::= '[' scalar_value,* ']'
+
+triangle_sequence ::= '<' item* '>'
+
+item ::= NEWLINE 'item' NEWLINE INDENT simple_property? end
 """
 
 from .events import *

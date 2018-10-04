@@ -93,8 +93,6 @@ class Tokenizer:
                 self.reader.forward()
             else:
                 stop = True
-        if (self.assignment and line != self.reader.line):
-            raise TokenizerError("Missing property value after assignment")
         # если идёт сборка токена из нескольких строк, то метка не меняется,
         # пока сборка не будет завершена
         if not self.in_concat_mode:
@@ -245,23 +243,6 @@ class Tokenizer:
         self.current_token = QuotedStringToken(self.mark, s.decode("utf-8"))
         self.reader.forward(last_quot_pos)
 
-    def find_line_end(self, line: bytes) -> int:
-        """
-        Возвращает позицию последнего символа в строке в
-        многострочном тексте.
-        """
-        # строка в многострочнике может заканчиваться закодированной
-        # русской буквой, '+' или кавычкой
-        # находим последний индекс для каждого из вариантов и возвращаем наибольший
-        m = self.rus_end_of_line_pattern.match(line)
-        if m is not None:
-            last_rus_letter = m.end(1)
-        else:
-            last_rus_letter = -1
-        plus = line.rfind(b"+") + 1
-        quote = line.rfind(b"'")
-        return max((last_rus_letter, plus, quote))
-
     def fetch_line(self) -> None:
         """
         Достаёт строку из многострочного текста.
@@ -362,7 +343,10 @@ class Tokenizer:
 
     def fetch_binary_data(self, word: bytes) -> None:
         # костыль для тестирования боевых компонентов
-        # self.current_token = BinaryDataToken(self.mark, word)
+        # раскомментируйте эту строку и закомментируйте следующую, чтобы
+        # данные из {} извлекались как 'A00F4' а не как [10, 0, 0, 15, 4]
+        # при сохранении в json строки выглядят читабельнее массивов
+        # self.current_token = BinaryDataToken(self.mark, word.decode("utf-8"))
         self.current_token = BinaryDataToken(self.mark, [int(d, 16) for d in word.decode("utf-8")])
         self.reader.forward(len(word) - 1)
 

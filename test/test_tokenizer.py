@@ -85,6 +85,82 @@ class TestTokenizer(unittest.TestCase):
         token = t.get_next_token()
         self.assertEqual(token.value, "Чем больше сила, тем больше ответственность.")
 
+    def test_decode_mixed_russian_letters(self):
+        data = b"'Abibas - '#1101#1090#1086' '#1089#1080#1083#1072'!'"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "Abibas - это сила!")
+
+    def test_decode_russian_letters_with_temp_tables(self):
+        data = b"'select * from #person, ##student --'#1082#1086#1084#1084#1077#1085#1090#1072#1088#1080#1081"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "select * from #person, ##student --комментарий")
+
+    def test_decode_many_sharps(self):
+        data = b"####1101###"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "###э###")
+
+    def test_decode_string_with_leading_tabs(self):
+        data = b"#9#9'from student where id = 1234'"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "\t\tfrom student where id = 1234")
+
+    def test_detect_single_string_tailed_with_quote(self):
+        data = b"#1101#1101#1101'...')"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "эээ...")
+        token = t.get_next_token()
+        self.assertEqual(token.id, ")")
+
+    def test_detect_single_string_tailed_with_rus_letter(self):
+        data = b"#1101#1101#1101)"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "эээ")
+        token = t.get_next_token()
+        self.assertEqual(token.id, ")")
+
+    def test_detect_joined_strings_first_with_quote(self):
+        data = b"'aaaa' + \r\n'bbbb')"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "aaaabbbb")
+        token = t.get_next_token()
+        self.assertEqual(token.id, ")")
+
+    def test_detect_joined_strings_first_with_rus_letter(self):
+        data = b"#1074#1086#1076#1086 + \r\n#1087#1072#1076)"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "водопад")
+        token = t.get_next_token()
+        self.assertEqual(token.id, ")")
+
+    def test_detect_joined_strings_followed_with_single_string_rus(self):
+        data = b"#1074#1086#1076#1086 + \r\n#1087#1072#1076\r\n#1090#1072#1088#1077#1083#1082#1072)"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "водопад")
+        token = t.get_next_token()
+        self.assertEqual(token.value, "тарелка")
+        token = t.get_next_token()
+        self.assertEqual(token.id, ")")
+
+    def test_detect_joined_strings_followed_with_single_string_quote(self):
+        data = b"'string one'+\r\n' continues here'\r\n#1082#1086#1085#1077#1094)"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "string one continues here")
+        token = t.get_next_token()
+        self.assertEqual(token.value, "конец")
+        token = t.get_next_token()
+        self.assertEqual(token.id, ")")
+
     def test_detect_assignment_token(self):
         data = b" = value"
         t = Tokenizer(data)
@@ -235,10 +311,3 @@ class TestTokenizer(unittest.TestCase):
         self.check_sequence(
             ["property", "=", "aaa bbb ccc", "END_FILE"],
             b"property = aaa bbb ccc")
-
-    def test_detect_missing_property_value(self):
-        data = b"property1 =    \r\n  property2 = 123"
-        t = Tokenizer(data)
-        for i in range(2):
-            t.get_next_token()
-        self.assertRaises(TokenizerError, t.get_next_token)

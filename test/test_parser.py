@@ -376,3 +376,51 @@ class TestParser(unittest.TestCase):
         for i in range(5):
             p.get_event()
         self.assertRaises(ParserError, p.get_event)
+
+    def test_state_transition_after_binary_sequence(self):
+        data = b"object f: b\r\n seq = {76010000424D7601000000000000760000002800000020000000100000000100}\r\n val = 1\r\nend"
+        p = Parser(data)
+        for i in range(7):
+            p.get_event()
+        self.assertEqual(p.state, p.parse_object_content)
+        event = p.get_event()
+        self.assertIsInstance(event, PropertyNameEvent)
+        self.assertEqual(event.value, "val")
+
+    def test_state_transition_after_scalar_sequence(self):
+        data = b"object f: b\r\n seq = (1\r\n2\r\n3)\r\n val = 1\r\nend"
+        p = Parser(data)
+        for i in range(9):
+            p.get_event()
+        self.assertEqual(p.state, p.parse_object_content)
+        event = p.get_event()
+        self.assertIsInstance(event, PropertyNameEvent)
+        self.assertEqual(event.value, "val")
+
+    def test_state_transition_after_identifier_sequence(self):
+        data = b"object f: b\r\n seq = [winter, spring, summer, fall]\r\n val = 1\r\nend"
+        p = Parser(data)
+        for i in range(10):
+            p.get_event()
+        self.assertEqual(p.state, p.parse_object_content)
+        event = p.get_event()
+        self.assertIsInstance(event, PropertyNameEvent)
+        self.assertEqual(event.value, "val")
+
+    def test_state_transition_after_item_sequence(self):
+        data = b"object f: b\r\n seq = <\r\nitem\r\nprop = True\r\nend>\r\n val = 1\r\nend"
+        p = Parser(data)
+        for i in range(10):
+            p.get_event()
+        self.assertEqual(p.state, p.parse_object_content)
+        event = p.get_event()
+        self.assertIsInstance(event, PropertyNameEvent)
+        self.assertEqual(event.value, "val")
+
+    def test_detect_missing_property_value(self):
+        data = b"field1 = \r\nfield2 = 4"
+        p = Parser(data)
+        p.state = p.parse_item
+        for i in range(2):
+            p.get_event()
+        self.assertRaises(ParserError, p.get_event)
