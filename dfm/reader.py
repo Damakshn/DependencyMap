@@ -6,10 +6,18 @@ class ReaderError(Exception):
 
 
 class Reader:
+    """
+    Работает с входным файлом на уровне байтов и символов, умеет двигаться по файлу вперёд,
+    читать символы, копировать текст кусками.
+    """
 
-    def __init__(self, input_data):
-        # нуль-символ как маркер конца файла
-        self.stream = input_data + b"\0"
+    def __init__(self, input_data):        
+        # проверка на BOM начале файла, если он есть, то отрезаем его
+        if list(input_data[:3]) == [239, 187, 191]:
+            # в конец добавляем нуль-символ, чтобы парсеру проще было обработать конец файла
+            self.stream = input_data[3:] + b"\0"
+        else:
+            self.stream = input_data + b"\0"
         self.line = 0
         self.pointer = 0
         self.index = 0

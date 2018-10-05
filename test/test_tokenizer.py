@@ -98,7 +98,7 @@ class TestTokenizer(unittest.TestCase):
         self.assertEqual(token.value, "select * from #person, ##student --комментарий")
 
     def test_decode_many_sharps(self):
-        data = b"####1101###"
+        data = b"####1101'###'"
         t = Tokenizer(data)
         token = t.get_next_token()
         self.assertEqual(token.value, "###э###")

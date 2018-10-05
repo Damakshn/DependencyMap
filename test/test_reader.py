@@ -71,3 +71,7 @@ class TestReader(unittest.TestCase):
 
     def test_get_too_big_chunk(self):
         self.assertRaises(ReaderError, self.r.get_chunk, 10000)
+    
+    def test_detect_BOM(self):
+        reader = Reader(bytes([239, 187, 191]) + b"object")
+        self.assertEqual(chr(reader.peek()), "o")

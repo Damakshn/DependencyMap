@@ -8,6 +8,11 @@ class TokenizerError(Exception):
 
 
 class Tokenizer:
+    """
+    Распознаёт токены из файла.
+    Использует класс Reader, чтобы двигаться по файлу вперёд, читать отдельные символы
+    и куски текста.
+    """
     # регулярка для проверки идентификаторов
     # правильный идентификатор содержит английские и
     # русские буквы любого регистра, цифры, _ и не может начинаться с цифры
@@ -26,7 +31,9 @@ class Tokenizer:
     # регулярка для поиска последней закодированной русской буквы
     rus_end_of_line_pattern = re.compile(b".*(#[0-9]+)[^0-9]*$")
     # регулярка для проверки наличия закодированных русских букв
-    rus_letter_pattern = re.compile(b".*#\d+")
+    has_rus_letters_pattern = re.compile(b".*#\d+")
+    # регулярка для вытаскивания закодированных русских букв из строки
+    rus_letter_pattern = re.compile("#\d+")
 
     def __init__(self, data):
         self.done = False
@@ -121,7 +128,7 @@ class Tokenizer:
         return self.boolean_pattern.match(word) is not None
 
     def check_encoded_russian_letters(self, word: bytes) -> bool:
-        return self.rus_letter_pattern.match(word) is not None
+        return self.has_rus_letters_pattern.match(word) is not None
 
     def fetch_next_token(self) -> None:
         """
@@ -201,7 +208,7 @@ class Tokenizer:
         self.reader.forward(6)
 
     def fetch_data_type(self) -> None:
-        # текущий символ - :,
+        # текущий символ - ':',
         # копируем всё от него до конца строки, обрезаем двоеточие и пробелы
         # убеждаемся, что остался правильный идентификатор
         # возвращаем токен с типом данных
@@ -216,8 +223,32 @@ class Tokenizer:
     def fetch_string(self, word: bytes) -> None:
         self.current_token = StringToken(self.mark, word.decode("utf-8"))
         self.reader.forward(len(word) - 1)
+    
+    def decode_russian_letters_regex(self, text: bytes) -> str:
+        """
+        Декодирует строку с русскими буквами с помощью регулярного выражения.
+        """
+        res = []
+        sample = text.decode("utf-8")
+        mark = 0
+        last_match = None
+        # обрабатываем результат работы регулярки, все закодированные буквы преобразуем
+        # если между двумя найденными буквами есть разрыв, то копируем весь текст между ними.
+        for match in self.rus_letter_pattern.finditer(sample):
+            if match.start() != mark:
+                res.append(sample[mark:match.start()])
+            res.append(chr(int(match.group()[1:])))
+            mark = match.end()
+            last_match = match
+        # если в строке остался необработанный хвост
+        if last_match.end() < len(sample):
+            res.append(sample[last_match.end():len(sample)])
+        return "".join(res)
 
     def decode_russian_letters(self, text: bytes) -> str:
+        """
+        Декодирует строку с русскими буквами с помощью посимвольного перебора.
+        """
         # добавляем в конец строки нуль-символ, чтобы
         # раскодировать букву в конце строки
         text = text + b"\0"
@@ -225,13 +256,24 @@ class Tokenizer:
         code_buffer = bytearray()
         reading_code_of_symbol = False
         for byte in text:
+            # если нашли цифру после '#', то пишем цифру в буфер
             if byte in b"1234567890" and reading_code_of_symbol:
                 code_buffer.append(byte)
             else:
-                if reading_code_of_symbol and len(code_buffer) > 0:
-                    res.append(chr(int(code_buffer)))
-                    code_buffer = bytearray()
+                # если читали код символа и нашли не-цифру
+                if reading_code_of_symbol:
+                    # преобразуем буфер в символ, если он не пустой
+                    if len(code_buffer) > 0:
+                        res.append(chr(int(code_buffer)))
+                        # очищаем буфер после обработки кода
+                        code_buffer = bytearray()
+                    else:
+                        # если в буфере ничего нет, то прочитанная ранее решетка была не служебная
+                        # пишем её как обычный символ
+                        res.append("#")
+                # нахождение '#' включает режим чтения кода                    
                 reading_code_of_symbol = (chr(byte) == "#")
+                # все прочие символы пишем без обработки, нуль-символ игнорируем
                 if not reading_code_of_symbol and byte != 0:
                     res.append(chr(byte))
         return "".join(res)
@@ -265,8 +307,10 @@ class Tokenizer:
         # перекодируем буферную строку, bytes => utf-8
         # если есть закодированные символы, обрабатываем их
         # иначе просто переводим байтовую строку в юникод
+        # print(draft)
         if self.check_encoded_russian_letters(draft):
-            draft = self.decode_russian_letters(draft)
+            # draft = self.decode_russian_letters(draft)
+            draft = self.decode_russian_letters_regex(draft)
         else:
             draft = draft.decode("utf-8")
         # добавляем строку в буфер для сборки токена
