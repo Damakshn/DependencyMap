@@ -168,7 +168,9 @@ class TestParser(unittest.TestCase):
 
     def test_parse_property_with_binary_sequence_value(self):
         data = b"property = {\r\n3333333333337733333333333330033333333333333773333333333333003333}"
-        fixture = [int(d, 16) for d in "3333333333337733333333333330033333333333333773333333333333003333"]
+        # формат токенов временно (?) изменён для улучшения читаемости
+        # fixture = [int(d, 16) for d in "3333333333337733333333333330033333333333333773333333333333003333"]
+        fixture = "3333333333337733333333333330033333333333333773333333333333003333"
         p = Parser(data)
         p.state = p.parse_item
         for i in range(2):

@@ -77,6 +77,12 @@ class TestTokenizer(unittest.TestCase):
         t = Tokenizer(data)
         token = t.get_next_token()
         self.assertEqual(token.value, "А смысл?")
+    
+    def test_decode_russian_letters_long_code(self):
+        data = b"#1099#1099'21'"
+        t = Tokenizer(data)
+        token = t.get_next_token()
+        self.assertEqual(token.value, "ыы21")
 
     def test_detect_splitted_string_with_russian_letters(self):
         data = b"#1063#1077#1084 #1073#1086#1083#1100#1096#1077 #1089#1080#1083#1072, #1090 +\r\n\
@@ -268,7 +274,9 @@ class TestTokenizer(unittest.TestCase):
             b"(\r\n1\r\n2\r\n3)")
 
     def test_detect_binary_sequenct(self):
-        fixture = [int(d, 16) for d in "BD00BDBDBD00BDBDBD00D68C6B00FFDED600FFFFFF00FFFFFF00FFF7EF00FFFF"]
+        # пока эти данные не востребованы, они будут перекодироваться в строки для улучшения читаемости
+        # fixture = [int(d, 16) for d in "BD00BDBDBD00BDBDBD00D68C6B00FFDED600FFFFFF00FFFFFF00FFF7EF00FFFF"]
+        fixture = "BD00BDBDBD00BDBDBD00D68C6B00FFDED600FFFFFF00FFFFFF00FFF7EF00FFFF"
         self.check_sequence(["{", fixture, "}", "END_FILE"],
             b"{\r\nBD00BDBDBD00BDBDBD00D68C6B00FFDED600FFFFFF00FFFFFF00FFF7EF00FFFF}")
 

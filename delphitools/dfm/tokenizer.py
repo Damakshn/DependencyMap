@@ -234,48 +234,16 @@ class Tokenizer:
         last_match = None
         # обрабатываем результат работы регулярки, все закодированные буквы преобразуем
         # если между двумя найденными буквами есть разрыв, то копируем весь текст между ними.
+        # из вставляемого без обработки текста удаляем кавычки
         for match in self.rus_letter_pattern.finditer(sample):
             if match.start() != mark:
-                res.append(sample[mark:match.start()])
+                res.append(sample[mark:match.start()].replace("'", ""))
             res.append(chr(int(match.group()[1:])))
             mark = match.end()
             last_match = match
         # если в строке остался необработанный хвост
         if last_match.end() < len(sample):
-            res.append(sample[last_match.end():len(sample)])
-        return "".join(res)
-
-    def decode_russian_letters(self, text: bytes) -> str:
-        """
-        Декодирует строку с русскими буквами с помощью посимвольного перебора.
-        """
-        # добавляем в конец строки нуль-символ, чтобы
-        # раскодировать букву в конце строки
-        text = text + b"\0"
-        res = []
-        code_buffer = bytearray()
-        reading_code_of_symbol = False
-        for byte in text:
-            # если нашли цифру после '#', то пишем цифру в буфер
-            if byte in b"1234567890" and reading_code_of_symbol:
-                code_buffer.append(byte)
-            else:
-                # если читали код символа и нашли не-цифру
-                if reading_code_of_symbol:
-                    # преобразуем буфер в символ, если он не пустой
-                    if len(code_buffer) > 0:
-                        res.append(chr(int(code_buffer)))
-                        # очищаем буфер после обработки кода
-                        code_buffer = bytearray()
-                    else:
-                        # если в буфере ничего нет, то прочитанная ранее решетка была не служебная
-                        # пишем её как обычный символ
-                        res.append("#")
-                # нахождение '#' включает режим чтения кода                    
-                reading_code_of_symbol = (chr(byte) == "#")
-                # все прочие символы пишем без обработки, нуль-символ игнорируем
-                if not reading_code_of_symbol and byte != 0:
-                    res.append(chr(byte))
+            res.append(sample[last_match.end():len(sample)].replace("'", ""))
         return "".join(res)
 
     def fetch_line(self) -> None:
@@ -302,8 +270,8 @@ class Tokenizer:
         distance = max(plus + 1, last_rus_letter - 1, quote)
         # выделяем разбираемый кусок текста из прочитанной строки
         # чтобы избежать попадания в неё скобок
-        # удаляем плюс в конце, если он есть и удаляем кавычки
-        draft = draft[:end_of_line].strip().replace(b"'", b"")
+        # удаляем плюс в конце, если он есть
+        draft = draft[:end_of_line].strip()
         # перекодируем буферную строку, bytes => utf-8
         # если есть закодированные символы, обрабатываем их
         # иначе просто переводим байтовую строку в юникод
@@ -312,7 +280,8 @@ class Tokenizer:
             # draft = self.decode_russian_letters(draft)
             draft = self.decode_russian_letters_regex(draft)
         else:
-            draft = draft.decode("utf-8")
+            # удаляем из строки лишние кавычки перед преобразованием в юникод
+            draft = draft.replace(b"'", b"").decode("utf-8")
         # добавляем строку в буфер для сборки токена
         self.concat_strings_buffer.append(draft)
         # если в конце стоял '+', ищем следующий токен
@@ -383,8 +352,8 @@ class Tokenizer:
         # раскомментируйте эту строку и закомментируйте следующую, чтобы
         # данные из {} извлекались как 'A00F4' а не как [10, 0, 0, 15, 4]
         # при сохранении в json строки выглядят читабельнее массивов
-        # self.current_token = BinaryDataToken(self.mark, word.decode("utf-8"))
-        self.current_token = BinaryDataToken(self.mark, [int(d, 16) for d in word.decode("utf-8")])
+        self.current_token = BinaryDataToken(self.mark, word.decode("utf-8"))
+        # self.current_token = BinaryDataToken(self.mark, [int(d, 16) for d in word.decode("utf-8")])
         self.reader.forward(len(word) - 1)
 
     def fetch_end_of_file(self) -> None:
