@@ -4,11 +4,17 @@ from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean
 from sqlalchemy import ForeignKey
 from sqlalchemy.orm import deferred, sessionmaker, relationship
 from sqlalchemy import event
+import binascii
 
 engine = create_engine('sqlite:///:memory:')
 Base = declarative_base()
 Session = sessionmaker(bind=engine)
 session = Session()
+
+
+class DatabaseObject:
+    schema = Column(String(30), nullable=False, default="dbo")
+
 
 class Node(Base):
     """
@@ -17,8 +23,11 @@ class Node(Base):
     __tablename__ = "Node"
     id = Column(Integer, primary_key=True)
     name = Column(String(120), nullable=False)
+    # когда последний раз обновлялись связи
+    last_revision = Column(DateTime, nullable=False)
+    # когда последний раз обновлялось определение
     last_update = Column(DateTime, nullable=False)
-    type = Column(String(50))    
+    type = Column(String(50))
 
     __mapper_args__ = {
         "polymorphic_on":"type",
@@ -26,7 +35,7 @@ class Node(Base):
     }
 
     def get_formatted_update_date(self):
-        return self.last_update.strftime("%d.%m.%Y %H:%M")
+        return self.last_revision.strftime("%d.%m.%Y %H:%M")
 
 
 class Link(Base):
@@ -88,6 +97,7 @@ class SQLQuery(Node):
     sql = deferred(Column(Text, nullable=False))
     database_id = Column(ForeignKey("Database.id"))
     database = relationship("Database")
+    crc32 = Column(Integer)
 
     __mapper_args__ = {
         "polymorphic_identity":"SQL-запрос"
@@ -193,14 +203,14 @@ class ClientConnection(Base):
         return f"Соединение {self.name} ({'???' if self.database is None else self.database.name})"
 
 
-class DBQuery(SQLQuery):
+class DBQuery(DatabaseObject, SQLQuery):
     """
     Процедура/функция/представление из базы данных исследуемой системы.
     """
     __tablename__ = "DBQuery"
     id = Column(ForeignKey("SQLQuery.id"), primary_key=True)
     database = relationship("Database", back_populates="executables")
-    schema = Column(String(30), default="dbo", nullable=False)
+    #schema = Column(String(30), default="dbo", nullable=False)
 
     @property
     def full_name(self):
@@ -262,14 +272,14 @@ class DBStoredProcedure(DBQuery):
         return f"{self.full_name} : Хранимая процедура"
 
 
-class DBTable(Node):
+class DBTable(DatabaseObject, Node):
     """
     Таблица из базы данных исследуемой системы.
     """
     __tablename__ = "DBTable"
     id = Column(ForeignKey("Node.id"), primary_key=True)
     definition = deferred(Column(Text, nullable=False))
-    schema = Column(String(30), nullable=False, default="dbo")
+    #schema = Column(String(30), nullable=False, default="dbo")
     database_id = Column(ForeignKey("Database.id"), nullable=False)
     database = relationship("Database", back_populates="tables")
 
@@ -297,5 +307,15 @@ def toggle_components(target, value, oldvalue, initiator):
             raise Exception("База данных не указана, соединение нельзя верифицировать.")
         for item in target.components:
             item.database = target.database
+
+
+@event.listens_for(SQLQuery.sql, 'set', propagate=True)
+def generate_crc_for_query_object(target, value, oldvalue, initiator):
+    """
+    Событие срабатывает при изменениии sql-исходников любого запроса
+    и автоматически генерирует контрольную сумму.
+    """
+    if value:
+        target.crc32 = binascii.crc32(value.encode("utf-8"))
 
 Base.metadata.create_all(engine)
