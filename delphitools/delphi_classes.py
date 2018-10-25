@@ -5,53 +5,48 @@ from .dfm import Grinder
 import collections
 import binascii
 
+class DelphiToolsException(Exception):
+    pass
+
 class DelphiProject:
     
-    def __init__(self, path, name):
-        # абсолютный путь к папке с проектом
-        self.path = path
+    def __init__(self, path_to_dproj, name):
         self.forms = []
         self.date_update = None
         # абсолютный путь к файлу проекта
-        self.path_to_dproj = None
-        # проверить доступность папки
-        if not os.path.exists(self.path):
-            raise Exception("Не найдена папка с проектом "+self.path+".")
-        # записать дату обновления
-        self.date_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path))        
-        # проверить доступность dproj
-        dproj_count = 0
-        for file in os.listdir(self.path):
-            if file.endswith(".dproj"):
-                if dproj_count > 0:
-                    raise Exception("Найдено несколько файлов *.dproj для АРМа"  + name + ".")
-                dproj_count += 1
-                self.path_to_dproj = os.path.join(self.path, file)
-        if dproj_count == 0:
-            raise Exception("Файл проекта не найден для АРМа "+name)
-    
-    def read_dproj_file(self) -> None:
-        """
-        Парсит файл *.dproj, содержащий информацию о файлах проекта
-        и заполняет список форм.
-        """
+        self.path_to_dproj = path_to_dproj        
+        # проверить доступность файла
+        if not os.path.exists(self.path_to_dproj):
+            raise DelphiToolsException(f"Не найден файл с проектом {self.path_to_dproj}.")
+        # достаём путь к папке с проектом
+        self.projdir = os.path.dirname(self.path_to_dproj)
+        # запомнить дату обновления файла проекта
+        self.date_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path_to_dproj))
+        # читаем файл проекта (xml)
         namespace = ""
-        try:            
+        try:
             root = ET.parse(self.path_to_dproj).getroot()
             if root.tag.startswith("{"):
                 namespace = root.tag[:root.tag.find("}")+1]
-            items = root.find(namespace + "ItemGroup")
-            for item in items.findall(namespace+"DCCReference"):
+            items = root.find(f"{namespace}ItemGroup")
+            for item in items.findall(f"{namespace}DCCReference"):
                 # имя модуля достаётся вот так, пока не востребовано
                 module_name = item.attrib["Include"]
-                # формируем абсолютный путь к файлу формы
+                # обрабатываем файл формы, если он указан
                 if len(item) > 0:
-                    # form_path = os.path.join(self.path, item[0].text + ".dfm")
                     form_name = module_name[:module_name.find(".")]
-                    form_path = os.path.join(self.path, form_name + ".dfm")
+                    # формируем путь к файлу
+                    form_path = os.path.join(self.projdir, f"{form_name}.dfm")
+                    # проверяем доступность файла
+                    if not os.path.exists(form_path):
+                        raise DelphiToolsException(f"Файл с описанием формы {form_path} не найден")
+                    form_update = datetime.datetime.fromtimestamp(os.path.getmtime(form_path))
+                    # по максимальной среди форм дате обновления получаем дату обновления арма
+                    if form_update > self.date_update:
+                        self.date_update: = form_update
                     self.forms.append(form_path)
         except ET.ParseError:
-            raise Exception("Не удалось распарсить файл проекта "+self.path_to_dproj)
+            raise DelphiToolsException(f"Не удалось распарсить файл проекта {self.path_to_dproj}")
         
     def get_forms(self) -> list:
         return self.forms
@@ -64,7 +59,7 @@ class DelphiForm:
         self.alias = None
         self.data = None
         if not os.path.exists(self.path):
-            raise Exception("Файл формы " + self.path + " не найден.")
+            raise Exception(f"Файл формы {self.path} не найден.")
         self.date_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path))
     
     def read_dfm(self) -> None:
@@ -91,7 +86,7 @@ class DBComponent:
 
     def __init__(self, data, form_alias):
         self.name = data["name"]
-        self.full_name = form_alias + "." + self.name
+        self.full_name = f"{form_alias}.{self.name}"
         self.type = data["type"]
     
     @classmethod
@@ -134,7 +129,7 @@ class DelphiConnection(DBComponent):
                 break
         
     def __repr__(self):
-        return self.full_name + ": TADOConnection; database: " + self.database
+        return f"{self.full_name} : TADOConnection; database: {self.database}"
 
 class DelphiQuery(DBComponent):
 
@@ -157,6 +152,6 @@ class DelphiQuery(DBComponent):
                     query_strings.extend(data[key])
             self.sql = "\n".join(query_strings)
         # контрольная сумма по тексту запроса
-        self.crc = binascii.crc32(self.sql.encode("utf-8"))
+        self.crc32 = binascii.crc32(self.sql.encode("utf-8"))
     
     
