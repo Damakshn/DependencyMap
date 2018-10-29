@@ -9,10 +9,10 @@ class DelphiToolsException(Exception):
     pass
 
 class DelphiProject:
-    
-    def __init__(self, path_to_dproj, name):
+
+    def __init__(self, path_to_dproj):
         self.forms = []
-        self.date_update = None
+        self.last_update = None
         # абсолютный путь к файлу проекта
         self.path_to_dproj = path_to_dproj        
         # проверить доступность файла
@@ -21,7 +21,7 @@ class DelphiProject:
         # достаём путь к папке с проектом
         self.projdir = os.path.dirname(self.path_to_dproj)
         # запомнить дату обновления файла проекта
-        self.date_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path_to_dproj))
+        self.last_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path_to_dproj))
         # читаем файл проекта (xml)
         namespace = ""
         try:
@@ -42,8 +42,8 @@ class DelphiProject:
                         raise DelphiToolsException(f"Файл с описанием формы {form_path} не найден")
                     form_update = datetime.datetime.fromtimestamp(os.path.getmtime(form_path))
                     # по максимальной среди форм дате обновления получаем дату обновления арма
-                    if form_update > self.date_update:
-                        self.date_update: = form_update
+                    if form_update > self.last_update:
+                        self.last_update = form_update
                     self.forms.append(form_path)
         except ET.ParseError:
             raise DelphiToolsException(f"Не удалось распарсить файл проекта {self.path_to_dproj}")
@@ -53,14 +53,15 @@ class DelphiProject:
 
 
 class DelphiForm:
-    
+
     def __init__(self, path):
         self.path = path
+        # имя формы .дфм
         self.alias = None
         self.data = None
         if not os.path.exists(self.path):
             raise Exception(f"Файл формы {self.path} не найден.")
-        self.date_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path))
+        self.last_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path))
     
     def read_dfm(self) -> None:
         grinder = Grinder()

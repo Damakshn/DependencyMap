@@ -1,2 +1,5 @@
 config.json
 __pycache__
+delphitest.py
+badforms.json
+term.json

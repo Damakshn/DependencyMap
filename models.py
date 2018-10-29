@@ -15,6 +15,9 @@ session = Session()
 class DatabaseObject:
     schema = Column(String(30), nullable=False, default="dbo")
 
+class DelphiThing:
+    last_sync = Column(DateTime)
+
 
 class Node(Base):
     """
@@ -24,7 +27,7 @@ class Node(Base):
     id = Column(Integer, primary_key=True)
     name = Column(String(120), nullable=False)
     # когда последний раз обновлялись связи
-    last_revision = Column(DateTime, nullable=False)
+    last_revision = Column(DateTime)
     # когда последний раз обновлялось определение
     last_update = Column(DateTime, nullable=False)
     type = Column(String(50))
@@ -80,7 +83,16 @@ class Link(Base):
         }
 
     def __repr__(self):
-        return f"{self.from_node.full_name} -> {self.to_node.full_name}"
+        if isinstance(self.from_node, DBQuery):
+            from_node_name = self.from_node.full_name
+        else:
+            from_node_name = self.from_node.name
+
+        if isinstance(self.to_node, DBQuery):
+            to_node_name = self.to_node.full_name
+        else:
+            to_node_name = self.to_node.name
+        return f"{from_node_name} -> {to_node_name}"
 
 # добавляем классу Node зависимости от Link
 # входящие и исходящие связи
@@ -113,8 +125,8 @@ class ClientQuery(SQLQuery):
     """
     __tablename__ = "ClientQuery"
     id = Column(ForeignKey("SQLQuery.id"), primary_key=True)
-    form_id = Column(ForeignKey("DelphiForm.id"), nullable=False)
-    form = relationship("DelphiForm")
+    form_id = Column(ForeignKey("Form.id"), nullable=False)
+    form = relationship("Form")
     component_type = Column(String(120), nullable=False)
     connection_id = Column(ForeignKey("ClientConnection.id"), nullable=False)
     connection = relationship("ClientConnection", back_populates="components")
@@ -124,19 +136,16 @@ class ClientQuery(SQLQuery):
         "polymorphic_identity":"Клиентский запрос"
     }
 
-    @property
-    def full_name(self):
-        return f"{self.form.application.name}.{self.form.name}.{self.name}"
-
     def __repr__(self):
         return f"{self.name}: {self.component_type} "
 
-class DelphiForm(Node):
+class Form(Node):
     """
     Delphi-форма с компонентами.
     """
-    __tablename__ = "DelphiForm"
+    __tablename__ = "Form"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
+    alias = Column(String(50))
     application_id = Column(ForeignKey("Application.id"), nullable=False)
     application = relationship("Application", foreign_keys=[application_id])
     path = Column(String(1000), nullable=False)
@@ -145,6 +154,9 @@ class DelphiForm(Node):
     __mapper_args__ = {
         "polymorphic_identity":"Форма"
     }
+    
+    def __repr__(self):
+        return self.name
 
 
 class Application(Node):
@@ -154,12 +166,15 @@ class Application(Node):
     __tablename__ = "Application"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
     path_to_dproj = Column(String(1000), nullable=False)
-    forms = relationship("DelphiForm", back_populates="application", foreign_keys=[DelphiForm.application_id])
+    forms = relationship("Form", back_populates="application", foreign_keys=[Form.application_id])
     connections = relationship("ClientConnection", back_populates="application")
 
     __mapper_args__ = {
         "polymorphic_identity":"АРМ"
     }
+
+    def __repr__(self):
+        return self.name
 
 
 class Database(Base):
@@ -190,7 +205,7 @@ class ClientConnection(Base):
     application_id = Column(ForeignKey("Application.id"), nullable=False)
     application = relationship("Application", back_populates="connections")
     # заполняется при создании из компонента
-    database_name = Column(String(50), nullable=False)
+    database_name = Column(String(50))
     # ссылка на конкретную базу устанавливается в ходе верификации
     database_id = Column(ForeignKey("Database.id"))
     database = relationship("Database", back_populates="connections")
