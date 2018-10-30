@@ -8,8 +8,8 @@ import binascii
 
 engine = create_engine('sqlite:///:memory:')
 Base = declarative_base()
-Session = sessionmaker(bind=engine)
-session = Session()
+SessionDPM = sessionmaker(bind=engine)
+
 
 
 class DatabaseObject:
@@ -17,6 +17,9 @@ class DatabaseObject:
 
 class DelphiThing:
     last_sync = Column(DateTime)
+
+class SourceCodeFile:
+    path = Column(String(1000), nullable=False)
 
 
 class Node(Base):
@@ -139,7 +142,7 @@ class ClientQuery(SQLQuery):
     def __repr__(self):
         return f"{self.name}: {self.component_type} "
 
-class Form(Node):
+class Form(Node, SourceCodeFile):
     """
     Delphi-форма с компонентами.
     """
@@ -148,7 +151,6 @@ class Form(Node):
     alias = Column(String(50))
     application_id = Column(ForeignKey("Application.id"), nullable=False)
     application = relationship("Application", foreign_keys=[application_id])
-    path = Column(String(1000), nullable=False)
     components = relationship("ClientQuery", back_populates="form", foreign_keys=[ClientQuery.form_id])
 
     __mapper_args__ = {
@@ -159,13 +161,12 @@ class Form(Node):
         return self.name
 
 
-class Application(Node):
+class Application(Node, SourceCodeFile):
     """
     Клиентское приложение, написанное на Delphi.
     """
     __tablename__ = "Application"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
-    path_to_dproj = Column(String(1000), nullable=False)
     forms = relationship("Form", back_populates="application", foreign_keys=[Form.application_id])
     connections = relationship("ClientConnection", back_populates="application")
 
