@@ -44,12 +44,9 @@ class DelphiProject:
                     # по максимальной среди форм дате обновления получаем дату обновления арма
                     if form_update > self.last_update:
                         self.last_update = form_update
-                    self.forms.append(form_path)
+                    self.forms.append({"name": form_name, "path" :form_path, "last_update": form_update})
         except ET.ParseError:
             raise DelphiToolsException(f"Не удалось распарсить файл проекта {self.path_to_dproj}")
-        
-    def get_forms(self) -> list:
-        return self.forms
 
 
 class DelphiForm:
