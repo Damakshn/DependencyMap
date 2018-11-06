@@ -5,21 +5,37 @@ from sqlalchemy import ForeignKey
 from sqlalchemy.orm import deferred, sessionmaker, relationship
 from sqlalchemy import event
 import binascii
+import datetime
 
 engine = create_engine('sqlite:///:memory:')
 Base = declarative_base()
 SessionDPM = sessionmaker(bind=engine)
 
 
-
 class DatabaseObject:
     schema = Column(String(30), nullable=False, default="dbo")
 
+
 class DelphiThing:
     last_sync = Column(DateTime)
+    sync_fields = []
+
+    def update_from(self, original):
+        """
+        Обновляет данные основных полей объекта данными из исходников.
+        """
+        for field in self.sync_fields:
+            setattr(self, field, original[field])
+        self.last_sync = datetime.datetime.now()
+    
+    @classmethod
+    def create_from(cls, original):
+        pass
+
 
 class SourceCodeFile:
     path = Column(String(1000), nullable=False)
+    last_update = Column(DateTime)
 
 
 class Node(Base):
@@ -31,8 +47,8 @@ class Node(Base):
     name = Column(String(120), nullable=False)
     # когда последний раз обновлялись связи
     last_revision = Column(DateTime)
-    # когда последний раз обновлялось определение
-    last_update = Column(DateTime, nullable=False)
+    # когда последний раз сверялись с оригиналом
+    last_sync = Column(DateTime, nullable=False)
     type = Column(String(50))
 
     __mapper_args__ = {
@@ -102,11 +118,11 @@ class Link(Base):
 Node.links_in = relationship("Link", foreign_keys=[Link.to_node_id])
 Node.links_out = relationship("Link", foreign_keys=[Link.from_node_id])
 
+
 class SQLQuery(Node):
     """
     Обобщённый SQL-запрос.
     """
-    # ToDo: узнать, можно ли получить сразу связи вверх и связи вниз
     __tablename__ = "SQLQuery"
     id = Column(ForeignKey("Node.id"), primary_key=True)
     sql = deferred(Column(Text, nullable=False))
@@ -122,7 +138,7 @@ class SQLQuery(Node):
         return self.name
 
 
-class ClientQuery(SQLQuery):
+class ClientQuery(SQLQuery, DelphiThing):
     """
     Компонент Delphi, содержащий SQL-запрос.
     """
@@ -131,18 +147,36 @@ class ClientQuery(SQLQuery):
     form_id = Column(ForeignKey("Form.id"), nullable=False)
     form = relationship("Form")
     component_type = Column(String(120), nullable=False)
-    connection_id = Column(ForeignKey("ClientConnection.id"), nullable=False)
+    connection_id = Column(ForeignKey("ClientConnection.id"))
     connection = relationship("ClientConnection", back_populates="components")
     database = relationship("Database", back_populates="client_components")
+    sync_fields = ["sql"]
 
     __mapper_args__ = {
         "polymorphic_identity":"Клиентский запрос"
     }
 
+    @classmethod
+    def create_from(cls, original, **refs):
+        # ToDo throw exception when missing form and connections in refs
+        """
+        Собирает ORM-модель для компонента Delphi.
+        Исходные данные берутся из оригинального компонента с диска,
+        к модели присоединяются ссылки на форму и на соединение с БД.
+        """
+        return ClientQuery(
+            name=original.name,
+            sql=original.sql,
+            component_type=original.type,
+            last_sync=datetime.datetime.now(),
+            connection=refs["connections"][original.connection],
+            form=refs["form"]
+        )
+
     def __repr__(self):
         return f"{self.name}: {self.component_type} "
 
-class Form(Node, SourceCodeFile):
+class Form(Node, SourceCodeFile, DelphiThing):
     """
     Delphi-форма с компонентами.
     """
@@ -152,16 +186,32 @@ class Form(Node, SourceCodeFile):
     application_id = Column(ForeignKey("Application.id"), nullable=False)
     application = relationship("Application", foreign_keys=[application_id])
     components = relationship("ClientQuery", back_populates="form", foreign_keys=[ClientQuery.form_id])
+    sync_fields = ["last_update"]
 
     __mapper_args__ = {
         "polymorphic_identity":"Форма"
     }
     
+    @classmethod
+    def create_from(cls, original, app):
+        """
+        Собирает ORM-модель для формы из данных оригинала в исходниках,
+        присоединяет ссылку на АРМ.
+        """
+        return Form(
+            name=original.name,
+            alias=original.alias,
+            last_update=original.last_update,
+            last_sync=datetime.datetime.now()
+            application=app,
+            path=original.path
+        )
+    
     def __repr__(self):
         return self.name
 
 
-class Application(Node, SourceCodeFile):
+class Application(Node, SourceCodeFile, DelphiThing):
     """
     Клиентское приложение, написанное на Delphi.
     """
@@ -169,6 +219,7 @@ class Application(Node, SourceCodeFile):
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
     forms = relationship("Form", back_populates="application", foreign_keys=[Form.application_id])
     connections = relationship("ClientConnection", back_populates="application")
+    sync_fields = ["last_update"]
 
     __mapper_args__ = {
         "polymorphic_identity":"АРМ"
@@ -214,6 +265,7 @@ class ClientConnection(Base):
     # если is_verified True, то данные соединения проверены вручную
     # и связи подключённых к нему компонентов можно анализировать
     is_verified = Column(Boolean, default=False, nullable=False)
+    sync_fields = ["database_name"]
 
     def __repr__(self):
         return f"Соединение {self.name} ({'???' if self.database is None else self.database.name})"
