@@ -66,15 +66,22 @@ class SyncSummary:
 
 session = SessionDPM()
     
-def make_named_dict(components_list, key):
+def make_named_dict(component_list):
     """
-    Преобразует список компонентов (выбранных из базы или полученных
-    после парсинга файла формы) в словарь вида "идентификатор_компонента": компонент.
-    В качестве идентификатора выбирается значение поля key.
+    Вспомогательный метод, упрощающий отсев объектов синхронизации.
+
+    Преобразует список объектов (выбранных из базы или полученных
+    из исходников) в словарь вида "идентификатор_компонента": компонент.
+
+    Имя поля-идентификатора зависит от класса упаковываемых объектов.
+
+    Если на входе будет пустой список, на выходе будет пустой словарь.
     """
     result = {}
-    for component in components_list:
-        result[component[key]] = component
+    if component_list:
+        key = component_list[0].__class__.get_sync_key_field()    
+        for component in component_list:
+            result[component[key]] = component
     return result
 
 def needs_update(obj_from_disk, obj_from_db):
@@ -124,7 +131,7 @@ def create_subordinate_member_from_source(source_object):
 
 def sync_subordinate_members(original_items, db_items, **refs) -> SyncSummary:
     """
-    Сопоставляет 2 словаря объектов: актуальные объекты в исходниках на диске
+    Сопоставляет 2 списка объектов: актуальные объекты в исходниках на диске
     и объекты ORM, взятые из БД.
 
     Метод определяет, какие объекты должны быть созданы, изменены или удалены.
@@ -133,21 +140,24 @@ def sync_subordinate_members(original_items, db_items, **refs) -> SyncSummary:
     Третий параметр - ссылки на другие ORM-модели, которые нужно прикрепить при создании/обновлении.
     """
     summary = SyncSummary()
-    for item in original_items:
+    # превращаем поданные на вход списки в словари, чтобы их было проще сравнивать поэлементно
+    originals = make_named_dict(original_items)
+    replicas = make_named_dict(db_items)
+    for item in originals:
         # объект есть на диске, но отсутствует в БД - создать
-        if item not in db_items:
+        if item not in replicas:
             summary.send_to_create(
-                db_items[item].__class__.create_from(original_items[item], **refs)
+                replicas[item].__class__.create_from(originals[item], **refs)
             )
         # объект есть и там, и там - сравнить и обновить, затем исключить объект из словаря
-        elif item in db_items and needs_update(original_items[item], db_items[item]):
-            db_items[item].update_from(original_items[item], **refs)
-            summary.send_to_update(db_items[item])
-            del db_items[item]
+        elif item in replicas and needs_update(originals[item], replicas[item]):
+            replicas[item].update_from(originals[item], **refs)
+            summary.send_to_update(replicas[item])
+            del replicas[item]
     # в перечне объектов, сохранённых в базе остались только те, которые
     # не имеют оригинала в исходниках, их надо удалить
-    for item in db_items:
-        summary.send_to_delete(db_items[item])
+    for item in replicas:
+        summary.send_to_delete(replicas[item])
     return summary
 
 def sync_form(form, connections):
@@ -165,23 +175,16 @@ def sync_form(form, connections):
         return summary
     # достаём оригинал из исходников
     parsed_form = DelphiForm(form.path)
-    # сопоставляем списки компонентов
-    original_components = make_named_dict(parsed_form.queries, "name")
-    db_components = make_named_dict(form.components, "name")
+    # синхронизируем компоненты на форме
     refs = {"form": form, "connections": connections}
-    components_to_sync = sync_subordinate_members(original_components, db_components, **refs)
+    # todo добавить поля queries и connections классу DelphiForm
+    components_to_sync = sync_subordinate_members(parsed_form.queries, form.components, **refs)
     # результат синхронизации вливаем в общий каталог
     summary.merge_with(components_to_sync)
     # добавляем форму на обновление
     form.update_from(parsed_form)
     summary.send_to_update(form)
     return summary
-
-def sync_form_components(original_form, db_form):
-    """
-    Синхронизирует список компонентов на форме.
-    """
-    pass
 
 def sync_application(app):
     """
@@ -208,16 +211,12 @@ def sync_application(app):
     connection_pool = []
     for form in parsed_forms:
         connection_pool.extend(form.connections)
-    original_connections = make_named_dict(connection_pool, "name")
-    repl_connections = make_named_dict(app.connections, "name")
-    connections_to_sync = sync_subordinate_members(original_connections, repl_connections, app=app)
+    connections_to_sync = sync_subordinate_members(connection_pool, app.connections, app=app)
     summary.merge_with(connections_to_sync)
     # ToDo get persistent connections from summary
     # сопоставляем списки форм, входящих в проект
-    original_forms = make_named_dict(parsed_forms, "path")
-    repl_forms = make_named_dict(app.forms, "path")
     refs = {"app": app, "connections":connection_pool}
-    forms_to_sync = sync_subordinate_members(original_forms, repl_forms, **refs)
+    forms_to_sync = sync_subordinate_members(parsed_forms, app.forms, **refs)
     summary.merge_with(forms_to_sync)
     forms_for_sync = []
     forms_for_sync.extend(summary.forms_to_create)

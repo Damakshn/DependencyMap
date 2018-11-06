@@ -16,7 +16,10 @@ class DatabaseObject:
     schema = Column(String(30), nullable=False, default="dbo")
 
 
-class DelphiThing:
+class DelphiThingReplica:
+    """
+    ORM-модель, подлежащая синхронизации с исходниками на Delphi.
+    """
     last_sync = Column(DateTime)
     sync_fields = []
 
@@ -31,6 +34,14 @@ class DelphiThing:
     @classmethod
     def create_from(cls, original):
         pass
+    
+    @classmethod
+    def get_sync_key_field(cls) -> str:
+        """
+        Возвращает имя атрибута, значения которого можно использовать
+        при сопоставлении с оригиналами из исходников во время синхронизации.
+        """
+        return ""
 
 
 class SourceCodeFile:
@@ -138,7 +149,7 @@ class SQLQuery(Node):
         return self.name
 
 
-class ClientQuery(SQLQuery, DelphiThing):
+class ClientQuery(SQLQuery, DelphiThingReplica):
     """
     Компонент Delphi, содержащий SQL-запрос.
     """
@@ -172,11 +183,19 @@ class ClientQuery(SQLQuery, DelphiThing):
             connection=refs["connections"][original.connection],
             form=refs["form"]
         )
+    
+    @classmethod
+    def get_sync_key_field(cls):
+        """
+        Возвращает имя атрибута, значения которого можно использовать
+        при сопоставлении с оригиналами из исходников во время синхронизации.
+        """
+        return "name"
 
     def __repr__(self):
         return f"{self.name}: {self.component_type} "
 
-class Form(Node, SourceCodeFile, DelphiThing):
+class Form(Node, SourceCodeFile, DelphiThingReplica):
     """
     Delphi-форма с компонентами.
     """
@@ -202,16 +221,24 @@ class Form(Node, SourceCodeFile, DelphiThing):
             name=original.name,
             alias=original.alias,
             last_update=original.last_update,
-            last_sync=datetime.datetime.now()
+            last_sync=datetime.datetime.now(),
             application=app,
             path=original.path
         )
+    
+    @classmethod
+    def get_sync_key_field(cls):
+        """
+        Возвращает имя атрибута, значения которого можно использовать
+        при сопоставлении с оригиналами из исходников во время синхронизации.
+        """
+        return "path"
     
     def __repr__(self):
         return self.name
 
 
-class Application(Node, SourceCodeFile, DelphiThing):
+class Application(Node, SourceCodeFile, DelphiThingReplica):
     """
     Клиентское приложение, написанное на Delphi.
     """
@@ -266,6 +293,23 @@ class ClientConnection(Base):
     # и связи подключённых к нему компонентов можно анализировать
     is_verified = Column(Boolean, default=False, nullable=False)
     sync_fields = ["database_name"]
+
+    @classmethod
+    def create_from(cls, original, **refs):
+        # throw exception when missing app in refs
+        return ClientConnection(
+            name=original.name,
+            database_name=original.database_name,
+            application=refs["app"]
+        )
+
+    @classmethod
+    def get_sync_key_field(cls):
+        """
+        Возвращает имя атрибута, значения которого можно использовать
+        при сопоставлении с оригиналами из исходников во время синхронизации.
+        """
+        return "name"
 
     def __repr__(self):
         return f"Соединение {self.name} ({'???' if self.database is None else self.database.name})"

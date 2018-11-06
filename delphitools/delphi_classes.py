@@ -8,7 +8,20 @@ import binascii
 class DelphiToolsException(Exception):
     pass
 
-class DelphiProject:
+class DelphiThingOriginal:
+    """
+    Оригинальный объект из исходников Delphi, подлежащий синхронизации с базой.
+    """
+
+    @classmethod
+    def get_sync_key_field(cls) -> str:
+        """
+        Возвращает имя атрибута, значения которого можно использовать
+        при сопоставлении с ORM-объектами из БД во время синхронизации.
+        """
+        return ""
+
+class DelphiProject(DelphiThingOriginal):
 
     def __init__(self, path_to_dproj):
         self.forms = []
@@ -49,7 +62,7 @@ class DelphiProject:
             raise DelphiToolsException(f"Не удалось распарсить файл проекта {self.path_to_dproj}")
 
 
-class DelphiForm:
+class DelphiForm(DelphiThingOriginal):
 
     def __init__(self, path):
         self.path = path
@@ -79,8 +92,12 @@ class DelphiForm:
         for key in self.data:
             if DBComponent.is_db_component(self.data[key]):
                 yield DBComponent.create(self.data[key], self.alias)
+    
+    @classmethod
+    def get_sync_key_field(cls):
+        return "path"
 
-class DBComponent:
+class DBComponent(DelphiThingOriginal):
 
     def __init__(self, data, form_alias):
         self.name = data["name"]
@@ -125,6 +142,10 @@ class DelphiConnection(DBComponent):
             if arg.startswith("Initial Catalog"):
                 self.database = arg.split("=")[1].strip()
                 break
+    
+    @classmethod
+    def get_sync_key_field(cls):
+        return "full_name"
         
     def __repr__(self):
         return f"{self.full_name} : TADOConnection; database: {self.database}"
@@ -151,5 +172,9 @@ class DelphiQuery(DBComponent):
             self.sql = "\n".join(query_strings)
         # контрольная сумма по тексту запроса
         self.crc32 = binascii.crc32(self.sql.encode("utf-8"))
+    
+    @classmethod
+    def get_sync_key_field(cls):
+        return "name"
     
     
