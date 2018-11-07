@@ -18,28 +18,98 @@ class SyncSummary:
     """
     def __init__(self):
         self.empty = True
-
-    @property
-    def empty(self):
-        return True
+        # Для раскладывания синхронизируемых объектов по категориям.
+        self.update = {}
+        self.delete = {}
+        self.create = {}
+        """
+        При формировании каталога эти словари заполняются так:
+            self.update = {"Form": [obj1, obj2], "Application": [obj3]}
+            self.delete = {"ClientQuery": [obj4, obj5]}
+            т.е. в качестве ключей словаря используются имена классов сохраняемых объектов.
+        """
+    
+    def __save_to(self, category_name, obj):
+        """
+        Сохраняет объект в выбранную категорию.
+        В качестве ключа используется имя класса сохраняемого объекта.
+        Выделяет место внутри категории, если необходимо.
+        """
+        category = getattr(self, category_name)
+        key = obj.__class__.__name__
+        if key not in category:
+            category[key] = []
+        category[key].append(obj)
+        
 
     def send_to_create(self, orm_object):
         """
         Помещает ORM-объект в каталог на вставку в таблицу базы данных.
         """
+        self.__save_to("create", orm_object)
         self.empty = False
 
-    def send_to_update(self, data):
+    def send_to_update(self, orm_object):
         """
         Помещает ORM-объект в каталог на обновление.
         """
+        self.__save_to("update", orm_object)
         self.empty = False
 
-    def send_to_delete(self, data):
+    def send_to_delete(self, orm_object):
         """
         Помещает ORM-объект в каталог на удаление.
         """
+        self.__save_to("delete", orm_object)
         self.empty = False
+    
+    def get_deleted_objects(self, cls):
+        """
+        Возвращает список объектов на удаление.
+
+        Если указан класс, то список будет отфильтрован по этому классу.
+        """
+        return self.__get_objects_in_category("delete", cls)
+    
+    def get_updated_objects(self, cls):
+        """
+        Возвращает список объектов на обновление.
+
+        Если указан класс, то список будет отфильтрован по этому классу.
+        """
+        return self.__get_objects_in_category("update", cls)
+    
+    def get_created_objects(self, cls):
+        """
+        Возвращает список объектов на создание.
+
+        Если указан класс, то список будет отфильтрован по этому классу.
+        """
+        return self.__get_objects_in_category("create", cls)
+    
+    def get_persistent_objects(self, cls):
+        """
+        Возвращает список объектов на обновление и создание.
+
+        Если указан класс, то список будет отфильтрован по этому классу.
+        """
+        updated = self.__get_objects_in_category("update", cls)
+        created = self.__get_objects_in_category("create", cls)
+        return created.extend(updated)
+    
+    def __get_objects_in_category(self, category_name, cls):
+        """
+        Возвращает список объектов из указанной категории.
+
+        Если класс объектов не указан, то возвращает все объекты в категории,
+        иначе - только объекты этого класса.
+        """
+        cls_name = cls.__name__
+        category = getattr(self, category_name)
+        if cls_name is None:
+            return list(category.values())
+        else:
+            return category.setdefault(cls_name, [])
 
     @property
     def description(self):
@@ -55,7 +125,13 @@ class SyncSummary:
         """
         Вливает в текущий каталог содержимое другого каталога.
         """
-        pass
+        for category in ["create", "update", "delete"]:
+            other__category = getattr(other, category)
+            self__category = getattr(self, category)
+            for key in other__category:
+                if key not in self__category:
+                    self__category[key] = []
+                self__category[key].extend(other__category[key])
 
     def forms_to_create(self):
         pass
@@ -74,7 +150,6 @@ def make_named_dict(component_list):
     из исходников) в словарь вида "идентификатор_компонента": компонент.
 
     Имя поля-идентификатора зависит от класса упаковываемых объектов.
-
     Если на входе будет пустой список, на выходе будет пустой словарь.
     """
     result = {}
@@ -207,20 +282,19 @@ def sync_application(app):
     summary.send_to_update(app)
     # разбираем оригиналы всех форм, входящих в проект
     parsed_forms = [DelphiForm(form["path"]) for form in project.forms]
-    # формируем список соединений арма с базами
+    # формируем список соединений арма с базами и синхронизируем его
     connection_pool = []
     for form in parsed_forms:
         connection_pool.extend(form.connections)
     connections_to_sync = sync_subordinate_members(connection_pool, app.connections, app=app)
     summary.merge_with(connections_to_sync)
-    # ToDo get persistent connections from summary
+    # теперь connection_pool - это словарь
+    connection_pool = make_named_dict(summary.get_persistent_objects(ClientConnection))
     # сопоставляем списки форм, входящих в проект
     refs = {"app": app, "connections":connection_pool}
     forms_to_sync = sync_subordinate_members(parsed_forms, app.forms, **refs)
     summary.merge_with(forms_to_sync)
-    forms_for_sync = []
-    forms_for_sync.extend(summary.forms_to_create)
-    forms_for_sync.extend(summary.forms_to_update)
+    forms_for_sync = summary.get_persistent_objects(Form)
     for form in forms_for_sync:
         sync_form(form, connection_pool)
     return summary
