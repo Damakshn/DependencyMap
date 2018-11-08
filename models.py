@@ -12,6 +12,10 @@ Base = declarative_base()
 SessionDPM = sessionmaker(bind=engine)
 
 
+class ModelException(Exception):
+    pass
+
+
 class DatabaseObject:
     schema = Column(String(30), nullable=False, default="dbo")
 
@@ -175,13 +179,19 @@ class ClientQuery(SQLQuery, DelphiThingReplica):
         Исходные данные берутся из оригинального компонента с диска,
         к модели присоединяются ссылки на форму и на соединение с БД.
         """
+        for param in ["parent", "connections"]:
+            if param not in refs:
+                raise ModelException(f"Пропущен именованный параметр {param}")
+        if original.connection not in refs["connections"]:
+            appname = refs["parent"].application.name
+            raise ModelException(f"Соединение {original.connection} не найдено в пуле соединений приложения {appname}")
         return ClientQuery(
             name=original.name,
             sql=original.sql,
             component_type=original.type,
             last_sync=datetime.datetime.now(),
             connection=refs["connections"][original.connection],
-            form=refs["form"]
+            form=refs["parent"]
         )
     
     @classmethod
@@ -212,17 +222,19 @@ class Form(Node, SourceCodeFile, DelphiThingReplica):
     }
     
     @classmethod
-    def create_from(cls, original, app):
+    def create_from(cls, original, **refs):
         """
         Собирает ORM-модель для формы из данных оригинала в исходниках,
         присоединяет ссылку на АРМ.
         """
+        if "parent" not in refs:
+            raise ModelException("Пропущен именованный параметр parent")
         return Form(
             name=original.name,
             alias=original.alias,
             last_update=original.last_update,
             last_sync=datetime.datetime.now(),
-            application=app,
+            application=refs["parent"],
             path=original.path
         )
     
@@ -296,11 +308,12 @@ class ClientConnection(Base):
 
     @classmethod
     def create_from(cls, original, **refs):
-        # throw exception when missing app in refs
+        if "parent" not in refs:
+            raise ModelException("Пропущен именованный параметр parent")
         return ClientConnection(
             name=original.name,
             database_name=original.database_name,
-            application=refs["app"]
+            application=refs["parent"]
         )
 
     @classmethod

@@ -72,26 +72,31 @@ class DelphiForm(DelphiThingOriginal):
         if not os.path.exists(self.path):
             raise Exception(f"Файл формы {self.path} не найден.")
         self.last_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path))
-    
-    def read_dfm(self) -> None:
+        # парсим форму
         grinder = Grinder()
         file = open(self.path, "rb")
         self.data = grinder.load_dfm(file.read())
         self.alias = self.data["name"]
         file.close()
-    
-    def get_db_components(self):
-        """
-        Генераторная функция, возвращающая компоненты для работы с БД,
-        прикреплённые к форме
-        """
-
-        if self.data is None:
-            self.read_dfm()
-        
+        # формируем список компонентов
+        self.components = []
         for key in self.data:
             if DBComponent.is_db_component(self.data[key]):
-                yield DBComponent.create(self.data[key], self.alias)
+                self.components.append(DBComponent.create(self.data[key], self.alias))
+    
+    @property
+    def connections(self):
+        """
+        Список соединений формы
+        """
+        return [c for c in self.components if isinstance(c, DelphiConnection)]
+    
+    @property
+    def queries(self):
+        """
+        Список компонентов, содержащих запросы к БД.
+        """
+        return [c for c in self.components if isinstance(c, DelphiQuery)]
     
     @classmethod
     def get_sync_key_field(cls):

@@ -1,6 +1,6 @@
 import datetime
 import json
-from models import Application, Form, ClientConnection, ClientQuery, Link, SessionDPM
+from models import Application, Form, ClientConnection, ClientQuery, Link, SessionDPM, Node
 from delphitools import DelphiProject, DelphiForm, DelphiQuery, DelphiConnection
 import os.path
 
@@ -204,6 +204,13 @@ def create_subordinate_member_from_source(source_object):
     else:
         raise Exception("Этот класс не поддерживается.")
 
+def make_orm_object_from(original, **refs):
+    if isinstance(original, DelphiForm):
+        return Form.create_from(original, **refs)
+    if isinstance(original, DelphiQuery):
+        return ClientQuery.create_from(original, **refs)
+
+
 def sync_subordinate_members(original_items, db_items, **refs) -> SyncSummary:
     """
     Сопоставляет 2 списка объектов: актуальные объекты в исходниках на диске
@@ -221,9 +228,15 @@ def sync_subordinate_members(original_items, db_items, **refs) -> SyncSummary:
     for item in originals:
         # объект есть на диске, но отсутствует в БД - создать
         if item not in replicas:
-            summary.send_to_create(
-                replicas[item].__class__.create_from(originals[item], **refs)
-            )
+            new_orm_object = make_orm_object_from(originals[item], **refs)
+            summary.send_to_create(new_orm_object)
+            # если новый объект участвует в построении графа зависимостей, то
+            # нужно создать связь от родительского объекта к нему
+            if not isinstance(new_orm_object, Node):
+                parent = refs["parent"]
+                summary.send_to_create(
+                    Link(from_node=parent, to_node=new_orm_object)
+                )
         # объект есть и там, и там - сравнить и обновить, затем исключить объект из словаря
         elif item in replicas and needs_update(originals[item], replicas[item]):
             replicas[item].update_from(originals[item], **refs)
@@ -251,8 +264,7 @@ def sync_form(form, connections):
     # достаём оригинал из исходников
     parsed_form = DelphiForm(form.path)
     # синхронизируем компоненты на форме
-    refs = {"form": form, "connections": connections}
-    # todo добавить поля queries и connections классу DelphiForm
+    refs = {"parent": form, "connections": connections}
     components_to_sync = sync_subordinate_members(parsed_form.queries, form.components, **refs)
     # результат синхронизации вливаем в общий каталог
     summary.merge_with(components_to_sync)
@@ -286,12 +298,12 @@ def sync_application(app):
     connection_pool = []
     for form in parsed_forms:
         connection_pool.extend(form.connections)
-    connections_to_sync = sync_subordinate_members(connection_pool, app.connections, app=app)
+    connections_to_sync = sync_subordinate_members(connection_pool, app.connections, parent=app)
     summary.merge_with(connections_to_sync)
     # теперь connection_pool - это словарь
     connection_pool = make_named_dict(summary.get_persistent_objects(ClientConnection))
     # сопоставляем списки форм, входящих в проект
-    refs = {"app": app, "connections":connection_pool}
+    refs = {"parent": app, "connections":connection_pool}
     forms_to_sync = sync_subordinate_members(parsed_forms, app.forms, **refs)
     summary.merge_with(forms_to_sync)
     forms_for_sync = summary.get_persistent_objects(Form)
