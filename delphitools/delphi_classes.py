@@ -27,18 +27,18 @@ class DelphiProject(DelphiThingOriginal):
         self.forms = []
         self.last_update = None
         # абсолютный путь к файлу проекта
-        self.path_to_dproj = path_to_dproj        
+        self.path = path_to_dproj        
         # проверить доступность файла
-        if not os.path.exists(self.path_to_dproj):
-            raise DelphiToolsException(f"Не найден файл с проектом {self.path_to_dproj}.")
+        if not os.path.exists(self.path):
+            raise DelphiToolsException(f"Не найден файл с проектом {self.path}.")
         # достаём путь к папке с проектом
-        self.projdir = os.path.dirname(self.path_to_dproj)
+        self.projdir = os.path.dirname(self.path)
         # запомнить дату обновления файла проекта
-        self.last_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path_to_dproj))
+        self.last_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path))
         # читаем файл проекта (xml)
         namespace = ""
         try:
-            root = ET.parse(self.path_to_dproj).getroot()
+            root = ET.parse(self.path).getroot()
             if root.tag.startswith("{"):
                 namespace = root.tag[:root.tag.find("}")+1]
             items = root.find(f"{namespace}ItemGroup")
@@ -59,7 +59,11 @@ class DelphiProject(DelphiThingOriginal):
                         self.last_update = form_update
                     self.forms.append({"name": form_name, "path" :form_path, "last_update": form_update})
         except ET.ParseError:
-            raise DelphiToolsException(f"Не удалось распарсить файл проекта {self.path_to_dproj}")
+            raise DelphiToolsException(f"Не удалось распарсить файл проекта {self.path}")
+    
+    @classmethod
+    def get_sync_key_field(cls):
+        return "path"
 
 
 class DelphiForm(DelphiThingOriginal):

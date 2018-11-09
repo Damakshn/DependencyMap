@@ -71,6 +71,14 @@ class Node(Base):
         "polymorphic_identity":"Объект"
     }
 
+    @property
+    def is_root(self):
+        """
+        Возвращает True, если узел является корневым, т.е. у него не бывает
+        входящих связей, только исходящие.
+        """
+        return False
+
     def get_formatted_update_date(self):
         return self.last_revision.strftime("%d.%m.%Y %H:%M")
 
@@ -263,6 +271,29 @@ class Application(Node, SourceCodeFile, DelphiThingReplica):
     __mapper_args__ = {
         "polymorphic_identity":"АРМ"
     }
+
+    @property
+    def is_root(self):
+        """
+        Возвращает True, если узел является корневым, т.е. у него не бывает
+        входящих связей, только исходящие.
+        """
+        return True
+    
+    @classmethod
+    def create_from(cls, original, **refs):
+        return Application(
+            name=original.name,
+            path=original.path
+        )
+
+    @classmethod
+    def get_sync_key_field(cls):
+        """
+        Возвращает имя атрибута, значения которого можно использовать
+        при сопоставлении с оригиналами из исходников во время синхронизации.
+        """
+        return "path"
 
     def __repr__(self):
         return self.name
