@@ -1,3 +1,3 @@
-from .grinder import Grinder
+from .grinder import Grinder, DFMException
 
-__all__ = ["Grinder"]
+__all__ = ["Grinder", "DFMException"]

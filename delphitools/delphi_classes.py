@@ -1,7 +1,7 @@
 import os
 import datetime
 import xml.etree.ElementTree as ET
-from .dfm import Grinder
+from .dfm import Grinder, DFMException
 import collections
 import binascii
 
@@ -77,16 +77,23 @@ class DelphiForm(DelphiThingOriginal):
             raise Exception(f"Файл формы {self.path} не найден.")
         self.last_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path))
         # парсим форму
-        grinder = Grinder()
-        file = open(self.path, "rb")
-        self.data = grinder.load_dfm(file.read())
-        self.alias = self.data["name"]
-        file.close()
-        # формируем список компонентов
+        self.is_broken = False
+        self.parsing_error_message = None
         self.components = []
-        for key in self.data:
-            if DBComponent.is_db_component(self.data[key]):
-                self.components.append(DBComponent.create(self.data[key], self.alias))
+        try:
+            grinder = Grinder()
+            file = open(self.path, "rb")
+            self.data = grinder.load_dfm(file.read())
+            self.alias = self.data["name"]
+            file.close()
+        except DFMException as e:
+                self.is_broken = True
+                self.parsing_error_message = str(e)        
+        # формируем список компонентов
+        if not self.is_broken:
+            for key in self.data:
+                if DBComponent.is_db_component(self.data[key]):
+                    self.components.append(DBComponent.create(self.data[key], self.alias))
     
     @property
     def connections(self):

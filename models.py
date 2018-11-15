@@ -1,15 +1,13 @@
-from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, Integer, String, DateTime, Text, Boolean
 from sqlalchemy import ForeignKey
-from sqlalchemy.orm import deferred, sessionmaker, relationship
+from sqlalchemy.orm import deferred, relationship
 from sqlalchemy import event
 import binascii
 import datetime
 
-engine = create_engine('sqlite:///:memory:')
-Base = declarative_base()
-SessionDPM = sessionmaker(bind=engine)
+
+BaseDPM = declarative_base()
 
 
 class ModelException(Exception):
@@ -24,6 +22,7 @@ class DelphiThingReplica:
     """
     ORM-модель, подлежащая синхронизации с исходниками на Delphi.
     """
+    # когда последний раз сверялись с оригиналом
     last_sync = Column(DateTime)
     sync_fields = []
 
@@ -34,11 +33,11 @@ class DelphiThingReplica:
         for field in self.sync_fields:
             setattr(self, field, original[field])
         self.last_sync = datetime.datetime.now()
-    
+
     @classmethod
     def create_from(cls, original):
         pass
-    
+
     @classmethod
     def get_sync_key_field(cls) -> str:
         """
@@ -53,7 +52,7 @@ class SourceCodeFile:
     last_update = Column(DateTime)
 
 
-class Node(Base):
+class Node(BaseDPM):
     """
     Компоненты исследуемой информационной системы.
     """
@@ -62,8 +61,6 @@ class Node(Base):
     name = Column(String(120), nullable=False)
     # когда последний раз обновлялись связи
     last_revision = Column(DateTime)
-    # когда последний раз сверялись с оригиналом
-    last_sync = Column(DateTime, nullable=False)
     type = Column(String(50))
 
     __mapper_args__ = {
@@ -83,7 +80,7 @@ class Node(Base):
         return self.last_revision.strftime("%d.%m.%Y %H:%M")
 
 
-class Link(Base):
+class Link(BaseDPM):
     """
     Связи между объектами Node.
     """
@@ -181,7 +178,6 @@ class ClientQuery(SQLQuery, DelphiThingReplica):
 
     @classmethod
     def create_from(cls, original, **refs):
-        # ToDo throw exception when missing form and connections in refs
         """
         Собирает ORM-модель для компонента Delphi.
         Исходные данные берутся из оригинального компонента с диска,
@@ -201,7 +197,7 @@ class ClientQuery(SQLQuery, DelphiThingReplica):
             connection=refs["connections"][original.connection],
             form=refs["parent"]
         )
-    
+
     @classmethod
     def get_sync_key_field(cls):
         """
@@ -223,12 +219,14 @@ class Form(Node, SourceCodeFile, DelphiThingReplica):
     application_id = Column(ForeignKey("Application.id"), nullable=False)
     application = relationship("Application", foreign_keys=[application_id])
     components = relationship("ClientQuery", back_populates="form", foreign_keys=[ClientQuery.form_id])
+    is_broken = Column(Boolean, default=False, nullable=False)
+    parsing_error_message = Column(String(300))
     sync_fields = ["last_update"]
 
     __mapper_args__ = {
         "polymorphic_identity":"Форма"
     }
-    
+
     @classmethod
     def create_from(cls, original, **refs):
         """
@@ -243,9 +241,11 @@ class Form(Node, SourceCodeFile, DelphiThingReplica):
             last_update=original.last_update,
             last_sync=datetime.datetime.now(),
             application=refs["parent"],
-            path=original.path
+            path=original.path,
+            is_broken=original.is_broken,
+            parsing_error_message=original.parsing_error_message
         )
-    
+
     @classmethod
     def get_sync_key_field(cls):
         """
@@ -253,7 +253,7 @@ class Form(Node, SourceCodeFile, DelphiThingReplica):
         при сопоставлении с оригиналами из исходников во время синхронизации.
         """
         return "path"
-    
+
     def __repr__(self):
         return self.name
 
@@ -279,11 +279,13 @@ class Application(Node, SourceCodeFile, DelphiThingReplica):
         входящих связей, только исходящие.
         """
         return True
-    
+
     @classmethod
     def create_from(cls, original, **refs):
         return Application(
             name=original.name,
+            last_update=original.last_update,
+            last_sync = datetime.datetime.now(),
             path=original.path
         )
 
@@ -299,7 +301,7 @@ class Application(Node, SourceCodeFile, DelphiThingReplica):
         return self.name
 
 
-class Database(Base):
+class Database(BaseDPM):
     """
     База данных в исследуемой системе
     """
@@ -315,7 +317,7 @@ class Database(Base):
         return self.name
 
 
-class ClientConnection(Base):
+class ClientConnection(BaseDPM):
     """
     Компонент-соединение, с помощью которого АРМ обращается к БД.
     Учёт соединений необходим для того, чтобы знать, в контексте какой
@@ -473,5 +475,3 @@ def generate_crc_for_query_object(target, value, oldvalue, initiator):
     """
     if value:
         target.crc32 = binascii.crc32(value.encode("utf-8"))
-
-Base.metadata.create_all(engine)

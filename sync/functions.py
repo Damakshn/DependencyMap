@@ -54,10 +54,12 @@ def sync_separate_app(app, session):
     project = DelphiProject(app.path)
     if project.last_update <= app.last_update:
         return
+    print(1)
     app = session.query(Application).\
-        options(selectinload(Application.connections).\
+        options(selectinload(Application.connections),\
         selectinload(Application.forms).\
         selectinload(Form.components)).filter(Application.id == app.id).one()
+    print(2)
     sync_app(project, app, session)
 
 def sync_separate_form(form, session):

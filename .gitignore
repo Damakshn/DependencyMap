@@ -3,3 +3,4 @@ __pycache__
 delphitest.py
 badforms.json
 term.json
+*.sqlite

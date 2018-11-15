@@ -1,30 +1,43 @@
-import os.path
-import time
-import file_grinder
-start_time = time.time()
+import os
+import json
+import datetime
+import calendar
+from connector import Connector
+from models import BaseDPM, Application
+from sync.functions import sync_separate_app
+from delphitools import DelphiProject
 
-import config
+path_to_config = "config.json"
 
 def main():
-	arms = config.get_arms_list()
-	main_dir = config.get_main_dir()
-	file_counter = 0
-	bad_files = []
-	for arm in arms:
-		arm_data = file_grinder.read_dproj(arm["path"])
-		for file in arm_data["modules"]+arm_data["forms"]:
-			path = os.path.join(main_dir, arm["name"], file)
-			try:
-				file_grinder.grind(path)
-			except file_grinder.SourceProcessingException as e:
-				bad_files.append((arm["name"], path, e.function, e.message))
-			except Exception as e:
-				bad_files.append((arm["name"], path, e))
-			file_counter+=1
-	print("Проверено {} файлов за {} секунд".format(file_counter, (time.time() - start_time)))	
-	print("Проблемные файлы")
-	for f in bad_files:
-		print(f)
+	if os.path.exists("db.sqlite"):
+		os.remove("db.sqlite")
+	config = read_config()
+	path_to_app = config["testApp"]
+	app_name = config["testAppName"]
+	d = datetime.datetime.now()
+	la = datetime.datetime.fromtimestamp(
+		calendar.timegm((datetime.date.today() - datetime.timedelta(days=30)).timetuple())
+	)
+	db = Connector()
+	session = db.connect_to_dpm()
+	data = {
+		"path": path_to_app,
+		"name": app_name,
+		"last_sync": d,
+		"last_update": la}
+	print(data)
+	test_app = Application(**data)
+	session.add(test_app)
+	session.flush()
+	sync_separate_app(test_app, session)
+	print(session.dirty)
+
+
+def read_config():
+	return json.load(open(path_to_config, "r", encoding="utf-8"))
+
+
 
 if __name__ == "__main__":
 	main()
