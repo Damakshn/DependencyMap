@@ -186,7 +186,7 @@ class ClientQuery(SQLQuery, DelphiThingReplica):
         for param in ["parent", "connections"]:
             if param not in refs:
                 raise ModelException(f"Пропущен именованный параметр {param}")
-        if original.connection not in refs["connections"]:
+        if original.connection is not None and original.connection not in refs["connections"]:
             appname = refs["parent"].application.name
             raise ModelException(f"Соединение {original.connection} не найдено в пуле соединений приложения {appname}")
         return ClientQuery(
@@ -194,7 +194,7 @@ class ClientQuery(SQLQuery, DelphiThingReplica):
             sql=original.sql,
             component_type=original.type,
             last_sync=datetime.datetime.now(),
-            connection=refs["connections"][original.connection],
+            connection=refs["connections"].get(original.connection, None),
             form=refs["parent"]
         )
 
@@ -344,8 +344,8 @@ class ClientConnection(BaseDPM):
         if "parent" not in refs:
             raise ModelException("Пропущен именованный параметр parent")
         return ClientConnection(
-            name=original.name,
-            database_name=original.database_name,
+            name=original.full_name,
+            database_name=original.database,
             application=refs["parent"]
         )
 

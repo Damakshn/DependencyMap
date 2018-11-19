@@ -70,6 +70,7 @@ class DelphiForm(DelphiThingOriginal):
 
     def __init__(self, path):
         self.path = path
+        self.name = os.path.split(self.path)[1]
         # имя формы .дфм
         self.alias = None
         self.data = None
@@ -172,6 +173,8 @@ class DelphiQuery(DBComponent):
         super(DelphiQuery, self).__init__(data, form_alias)
         self.sql = ""
         self.connection = data.get("Connection", None)
+        if self.connection and self.connection.find(".") == -1:
+            self.connection = f"{form_alias}.{self.connection}"
         # если компонент - хранимая процедура, то текст запроса - название вызываемой процедуры
         if self.type == "TADOStoredProc":
             proc = data["ProcedureName"]

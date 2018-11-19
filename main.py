@@ -26,12 +26,11 @@ def main():
 		"name": app_name,
 		"last_sync": d,
 		"last_update": la}
-	print(data)
 	test_app = Application(**data)
 	session.add(test_app)
 	session.flush()
 	sync_separate_app(test_app, session)
-	print(session.dirty)
+	session.commit()
 
 
 def read_config():

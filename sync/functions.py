@@ -32,7 +32,7 @@ def sync_all(delphi_dir_content, db_apps, session):
     """
     projects = [DelphiProject(path) for path in delphi_dir_content]
     sync_subordinate_members(projects, db_apps, session)
-    apps_to_work = [item for item in session.dirty if isinstance(item, Application)]
+    apps_to_work = get_objects_to_sync(session, Application)
     ids = (item.id for item in apps_to_work)
     # запрашиваем данные по всем армам без ленивой загрузки,
     # то есть тащим из базы вообще всё: соединения, формы, компоненты
@@ -54,12 +54,10 @@ def sync_separate_app(app, session):
     project = DelphiProject(app.path)
     if project.last_update <= app.last_update:
         return
-    print(1)
     app = session.query(Application).\
         options(selectinload(Application.connections),\
         selectinload(Application.forms).\
         selectinload(Form.components)).filter(Application.id == app.id).one()
-    print(2)
     sync_app(project, app, session)
 
 def sync_separate_form(form, session):
@@ -136,10 +134,9 @@ def sync_app(project, app, session):
     sync_subordinate_members(parsed_forms, app.forms, session, parent=app)
     # готовим синхронизацию компонентов форм
     # получаем список форм, которые остаются в базе
-    forms_for_sync = [item for item in session.dirty if isinstance(item, Form)]
+    forms_for_sync = get_objects_to_sync(session, Form)
     # получаем перечень актуальных соединений арма
-    persist_connections = [item for item in session.dirty if isinstance(item, ClientConnection)]
-    connections_dict = make_named_dict(persist_connections)
+    connections_dict = make_named_dict(get_objects_to_sync(session, ClientConnection))
     # составляем словарь оригинальных форм из исходников
     parsed_forms_dict = make_named_dict(parsed_forms)
     # синхронизируем компонентых тех форм, которые остаются в базе
@@ -148,6 +145,14 @@ def sync_app(project, app, session):
         original = parsed_forms_dict[f.path]
         refs = {"parent": f, "connections": connections_dict}
         sync_subordinate_members(original.queries, f.components, session, **refs)
+
+def get_objects_to_sync(session, cls):
+    """
+    Возвращает список новых и изменённых объектов указанного класса в сессии.
+    """
+    result = [item for item in session.dirty if isinstance(item, cls)]
+    result.extend([item for item in session.new if isinstance(item, cls)])
+    return result
 
 def sync_subordinate_members(original_items, db_items, session, **refs):
     """
@@ -192,9 +197,9 @@ def make_named_dict(component_list):
     """
     result = {}
     if component_list:
-        key = component_list[0].__class__.get_sync_key_field()    
+        key = component_list[0].__class__.get_sync_key_field()
         for component in component_list:
-            result[component[key]] = component
+            result[getattr(component, key)] = component
     return result
 
 def make_orm_object_from(original, **refs):
@@ -204,6 +209,8 @@ def make_orm_object_from(original, **refs):
         return ClientQuery.create_from(original, **refs)
     if isinstance(original, DelphiProject):
         return Application.create_from(original, **refs)
+    if isinstance(original, DelphiConnection):
+        return ClientConnection.create_from(original, **refs)
 
 def needs_update(obj_from_disk, obj_from_db):
     """
