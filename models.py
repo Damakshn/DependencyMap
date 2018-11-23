@@ -436,8 +436,6 @@ class DBTable(DatabaseObject, Node):
     """
     __tablename__ = "DBTable"
     id = Column(ForeignKey("Node.id"), primary_key=True)
-    definition = deferred(Column(Text, nullable=False))
-    #schema = Column(String(30), nullable=False, default="dbo")
     database_id = Column(ForeignKey("Database.id"), nullable=False)
     database = relationship("Database", back_populates="tables")
 

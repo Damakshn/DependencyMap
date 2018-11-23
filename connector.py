@@ -1,20 +1,48 @@
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, engine
 from sqlalchemy.orm import sessionmaker
 from models import BaseDPM, Database
+import pyodbc
+
+class DriverNotFoundException(Exception):
+    pass
 
 class Connector:
+    """
+    Класс, отвечающий за управление соединениями с БД.
+    Соединение с базой DPM и основными базами информационной системы обрабатываются отдельно.
+    Для инициализации требует словарь-конфиг с полями:
+        username_sql, password_sql, host_sql - для подключения к 
+        боевым базам ИС;
+        host_dpm, password_dpm, host_dpm - для подключения к базе
+        ДПМ (пока неактивно, используем sqlite).
+    """
 
     def __init__(self, **config):
-        if "url_dpm" not in config:
+        if "host_dpm" not in config:
             self.url_dpm = 'sqlite:///db.sqlite'
         else:
-            self.url_dpm = config["url_dpm"]
+            self.url_dpm = config["host_dpm"]
         # вытащить из конфига данные для подключения к боевому серверу
-        self.__sqlserver_user = config.get("username")
-        self.__sqlserver_pswd = config.get("password")
-        self.__sqlserver_url = config.get("server_url")
+        self.__sqlserver_user = config.get("username_sql")
+        self.__sqlserver_pswd = config.get("password_sql")
+        self.__sqlserver_host = config.get("host_sql")
         self.__sessionmaker_dpm = None
-        self.__makers = {}
+        self.__driver_sql = self.__get_driver()
+        self.__connections = {}
+    
+    def __get_driver(self):
+        """
+        Смотрит установленные в системе ODBC-драйверы для SQL Server и 
+        возвращает имя последнего установленного драйвера.
+        Кидает исключение, если подходящих драйверов нет.
+        """
+        available_drivers = [
+            driver for driver in pyodbc.drivers() if driver.find("SQL Server") >= 0
+        ]
+        if len(available_drivers) == 0:
+            raise DriverNotFoundException("Не найден ODBC драйвер для соединения с SQL Server.")
+        return available_drivers[len(available_drivers)-1]
+
     
     def connect_to_dpm(self):
         if self.__sessionmaker_dpm is None:
@@ -23,19 +51,27 @@ class Connector:
             self.__sessionmaker_dpm = sessionmaker(bind=engine)
         return self.__sessionmaker_dpm()
     
-    def connect_to(self, sysdb):
+    def connect_to(self, db):
         """
         Метод для соединения с произвольной БД основной информационной системы.
         Принимает либо инстанс модели Database, либо строку с именем базы.
         """
-        if isinstance(sysdb, Database):
-            maker = sysdb.name
+        if isinstance(db, Database):
+            db_name = db.name
         else:
-            maker = sysdb
-        if maker not in self.__makers:
-            pass
-            # create engine (needs server credentials from config)
-            # create sessionmaker (use core?)
-        return self.__makers[maker]()
+            db_name = db
+        if db_name not in self.__connections:
+            url = engine.url.URL(
+                "mssql+pyodbc",
+                username=self.__sqlserver_user,
+                password=self.__sqlserver_pswd,
+                host=self.__sqlserver_host,
+                database=db_name,
+                query=dict(driver=self.__driver_sql)
+            )
+            e = create_engine(url, echo=True)
+            self.__connections[db_name] = sessionmaker(bind=e)
+            #self.__connections[db_name] = e.connect()
+        return self.__connections[db_name]()
 
 __all__ = ["Connector"]

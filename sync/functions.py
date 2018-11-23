@@ -150,6 +150,8 @@ def get_objects_to_sync(session, cls):
     """
     Возвращает список новых и изменённых объектов указанного класса в сессии.
     """
+    # itertools.chain(l1, l2)
+    # [*l1, *l2]
     result = [item for item in session.dirty if isinstance(item, cls)]
     result.extend([item for item in session.new if isinstance(item, cls)])
     return result
