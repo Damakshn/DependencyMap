@@ -1,34 +1,79 @@
 from .sys_queries import (
-    all_functions,
+    all_table_functions,
+    all_scalar_functions,
     all_procedures,
     all_tables,
     all_triggers,
     all_views)
-from sqlalchemy import Column, Integer, String, DateTime, Table
-from sqlalchemy.ext.declarative import declarative_base
-
-OriginalBase = declarative_base()
-
-
-class OriginalTable(OriginalBase):
-    __tablename__ = all_tables
-    database_object_id = Column(Integer, primary_key=True)
-    schema_name = Column(String)
-    name = Column(String)
-    last_update = Column(DateTime)
-"""
-class OriginalTrigger(OriginalBase):
-    __tablename__ = all_triggers
+import datetime
+from .common_classes import Original
+from dataclasses import dataclass
 
 
-class OriginalProcedure(OriginalBase):
-    __tablename__ = all_procedures
+class DBOriginal(Original):
+
+    @classmethod
+    def key_field(cls):
+        return "name"
 
 
-class OriginalView(OriginalBase):
-    __tablename__ = all_views
+@dataclass
+class OriginalDatabase(DBOriginal):
+    name: str
+    last_update: datetime.datetime
+
+@dataclass
+class OriginalTable(DBOriginal):
+    database_object_id: int
+    schema: str
+    name: str
+    last_update: datetime.datetime
 
 
-class OriginalFunction(OriginalBase):
-    __tablename__ = all_functions
-"""
+@dataclass
+class OriginalTrigger(DBOriginal):
+    database_object_id: int
+    schema: str
+    name: str
+    last_update: datetime.datetime
+    table_id: int
+    is_update: bool
+    is_delete: bool
+    is_insert: bool
+    sql: str
+
+
+@dataclass
+class OriginalProcedure(DBOriginal):
+    database_object_id: int
+    schema: str
+    name: str
+    last_update: datetime.datetime
+    sql: str
+
+
+@dataclass
+class OriginalView(DBOriginal):
+    database_object_id: int
+    schema: str
+    name: str
+    last_update: datetime.datetime
+    sql: str
+
+
+@dataclass
+class OriginalTableFunction(DBOriginal):
+    database_object_id: int
+    schema: str
+    name: str
+    last_update: datetime.datetime
+    sql: str
+
+
+@dataclass
+class OriginalScalarFunction(DBOriginal):
+    database_object_id: int
+    schema: str
+    name: str
+    last_update: datetime.datetime
+    sql: str

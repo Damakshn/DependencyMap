@@ -1,27 +1,16 @@
 import os
 import datetime
 import xml.etree.ElementTree as ET
-from .dfm import Grinder, DFMException
+from dfm import DFMLoader, DFMException
 import collections
 import binascii
+from .common_classes import Original
 
 class DelphiToolsException(Exception):
     pass
 
-class DelphiThingOriginal:
-    """
-    Оригинальный объект из исходников Delphi, подлежащий синхронизации с базой.
-    """
 
-    @classmethod
-    def get_sync_key_field(cls) -> str:
-        """
-        Возвращает имя атрибута, значения которого можно использовать
-        при сопоставлении с ORM-объектами из БД во время синхронизации.
-        """
-        return ""
-
-class DelphiProject(DelphiThingOriginal):
+class DelphiProject(Original):
 
     def __init__(self, path_to_dproj):
         self.forms = []
@@ -62,11 +51,11 @@ class DelphiProject(DelphiThingOriginal):
             raise DelphiToolsException(f"Не удалось распарсить файл проекта {self.path}")
     
     @classmethod
-    def get_sync_key_field(cls):
+    def key_field(cls):
         return "path"
 
 
-class DelphiForm(DelphiThingOriginal):
+class DelphiForm(Original):
 
     def __init__(self, path):
         self.path = path
@@ -82,9 +71,9 @@ class DelphiForm(DelphiThingOriginal):
         self.parsing_error_message = None
         self.components = []
         try:
-            grinder = Grinder()
+            loader = DFMLoader()
             file = open(self.path, "rb")
-            self.data = grinder.load_dfm(file.read())
+            self.data = loader.load_dfm(file.read())
             self.alias = self.data["name"]
             file.close()
         except DFMException as e:
@@ -111,10 +100,10 @@ class DelphiForm(DelphiThingOriginal):
         return [c for c in self.components if isinstance(c, DelphiQuery)]
     
     @classmethod
-    def get_sync_key_field(cls):
+    def key_field(cls):
         return "path"
 
-class DBComponent(DelphiThingOriginal):
+class DBComponent(Original):
 
     def __init__(self, data, form_alias):
         self.name = data["name"]
@@ -161,7 +150,7 @@ class DelphiConnection(DBComponent):
                 break
     
     @classmethod
-    def get_sync_key_field(cls):
+    def key_field(cls):
         return "full_name"
         
     def __repr__(self):
@@ -193,7 +182,5 @@ class DelphiQuery(DBComponent):
         self.crc32 = binascii.crc32(self.sql.encode("utf-8"))
     
     @classmethod
-    def get_sync_key_field(cls):
+    def key_field(cls):
         return "name"
-    
-    

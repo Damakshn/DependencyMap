@@ -1,6 +1,6 @@
 from sqlalchemy import create_engine, engine
 from sqlalchemy.orm import sessionmaker
-from models import BaseDPM, Database
+from .models import BaseDPM, Database
 import pyodbc
 
 class DriverNotFoundException(Exception):
@@ -55,6 +55,7 @@ class Connector:
         """
         Метод для соединения с произвольной БД основной информационной системы.
         Принимает либо инстанс модели Database, либо строку с именем базы.
+        Возвращает объект-соединение.
         """
         if isinstance(db, Database):
             db_name = db.name
@@ -69,9 +70,8 @@ class Connector:
                 database=db_name,
                 query=dict(driver=self.__driver_sql)
             )
-            e = create_engine(url, echo=True)
-            self.__connections[db_name] = sessionmaker(bind=e)
-            #self.__connections[db_name] = e.connect()
-        return self.__connections[db_name]()
+            e = create_engine(url, echo=False)
+            self.__connections[db_name] = e.connect()
+        return self.__connections[db_name]
 
 __all__ = ["Connector"]

@@ -3,7 +3,7 @@ from .composer import Composer
 class DFMException(Exception):
     pass
 
-class Grinder:
+class DFMLoader:
 
     def __init__(self):
         pass
