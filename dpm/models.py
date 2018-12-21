@@ -74,6 +74,9 @@ class Node(BaseDPM, Synchronizable):
 
     def get_formatted_update_date(self):
         return self.last_revision.strftime("%d.%m.%Y %H:%M")
+    
+    def get_keywords(self):
+        raise NotImplementedError(f"Метод get_keywords не определён для класса {self.__class__}")
 
 
 class Link(BaseDPM):
@@ -88,21 +91,17 @@ class Link(BaseDPM):
     to_node_id = Column(Integer, ForeignKey("Node.id"), nullable=False)
     to_node = relationship("Node", foreign_keys=[to_node_id])
     comment = Column(Text)
-    # если is_verified True, то связь считается подтверждённой
-    # подтверждённая связь не будет стёрта при обновлении
+    # если is_verified True, то связь считается подтверждённой;
+    # подтверждённая связь не будет стёрта при обновлении;
     # у связей, созданных автоматически is_verified по умолчанию False,
     # у созданных вручную - True
     is_verified = Column(Boolean, default=False, nullable=False)
-    # если True, то связь считается сломаной
+    # если is_broken True, то связь считается сломаной
     # это поле необходимо на первое время для тестов
     # сломанная связь не будет стёрта при обновлении и не будет отображаться
     # и не будет использоваться при поиске зависимостей
     is_broken = Column(Boolean, default=False, nullable=False)
-    # что эта связь показывает, что self.start делает с self.end
-    # поле хранит битовую маску, порядок битов такой
-    # contain call delete update insert select
-    action = Column(Integer)
-    """ 
+    # поля, описывающие что объект from_node делает с объектом to_node
     contain = Column(Boolean, default=False)
     call = Column(Boolean, default=False)
     select = Column(Boolean, default=False)
@@ -111,9 +110,6 @@ class Link(BaseDPM):
     delete = Column(Boolean, default=False)
     truncate = Column(Boolean, default=False)
     drop = Column(Boolean, default=False)
-    multiple = Column(Boolean, default=False)
-    unknown = Column(Boolean, default=False)
-    """    
 
     def __repr__(self):
         if isinstance(self.from_node, DBQuery):
@@ -458,6 +454,9 @@ class DBQuery(SQLQuery, DatabaseObject):
             database_object_id=original.database_object_id,
             database=refs["parent"]
         )
+    
+    def get_keywords(self):
+        return []
 
 
 class DBView(DBQuery):
@@ -585,6 +584,66 @@ class DBTable(Node, DatabaseObject):
             last_update=original.last_update,
             database=refs["parent"]
         )
+    
+    def get_keywords(self):
+        """
+        Получение ключевых слов для таблицы.
+
+        С таблицей проводятся операции select, insert, update, delete, truncate, drop.
+        Имя таблицы может иметь следующий вид:
+            * имя_таблицы
+            * схема.имя_таблицы
+            * база.схема.имя_таблицы
+        При этом любой сегмент имени может быть включён в [ ]
+        Шаблоны для поиска:
+            insert
+                into <tablename>
+            update
+                update <tablename>
+            truncate
+                truncate <tablename>
+            drop
+                drop table <tablename>
+            delete
+                delete from <tablename>
+            select
+                <tablename>,
+                join <tablename>
+                from <tablename> - хитрая инструкция, так как она может совпасть с delete_from
+        Для разрешения конфликта между select ... from и delete from 
+        вводится дополнительное ключевое слово contestive_select            
+        """
+        various_names = []
+        various_names.append(self.name)
+
+        kw_dict = {
+            "select": [],
+            "contestive_select": [],
+            "update": [],
+            "insert": [],
+            "delete": [],
+            "truncate": [],
+            "drop": [],
+        }
+        for kw in kw_dict:
+            for name in various_names:
+                if kw == "select":
+                    kw_dict[kw].append(f"join {name}")
+                    kw_dict[kw].append(f"{name},")
+                elif kw == "contestive_select":
+                    kw_dict[kw].append(f"from {name}")
+                elif kw == "update":
+                    kw_dict[kw].append(f"update {name}")
+                elif kw == "insert":
+                    kw_dict[kw].append(f"into {name}")
+                elif kw == "delete":
+                    kw_dict[kw].append(f"delete from {name}")
+                elif kw == "truncate":
+                    kw_dict[kw].append(f"truncate {name}")
+                elif kw == "drop":
+                    kw_dict[kw].append(f"drop table {name}")
+
+        return kw_dict
 
 
 class Database(Node):
