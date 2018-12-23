@@ -75,8 +75,8 @@ class Node(BaseDPM, Synchronizable):
     def get_formatted_update_date(self):
         return self.last_revision.strftime("%d.%m.%Y %H:%M")
     
-    def get_keywords(self):
-        raise NotImplementedError(f"Метод get_keywords не определён для класса {self.__class__}")
+    def get_regexp(self):
+        raise NotImplementedError(f"Метод get_regexp не определён для класса {self.__class__}")
 
 
 class Link(BaseDPM):
@@ -250,10 +250,12 @@ class SQLQuery(Node):
         extra_spaces_and_line_breaks = "\s+"
         # todo разобраться в lookahead
         comma_no_space = "(?<=,)(?=[^\s])"
+        square_brackets = "[\[\]]"
         sql = sql.lower()
         sql = remove_comments(sql)
         sql = re.sub(extra_spaces_and_line_breaks, " ", sql)
         sql = re.sub(comma_no_space, " ", sql)
+        sql = re.sub(square_brackets, "", sql)
         return sql
 
 
@@ -455,7 +457,7 @@ class DBQuery(SQLQuery, DatabaseObject):
             database=refs["parent"]
         )
     
-    def get_keywords(self):
+    def get_regexp(self):
         return []
 
 
@@ -585,65 +587,63 @@ class DBTable(Node, DatabaseObject):
             database=refs["parent"]
         )
     
-    def get_keywords(self):
+    def get_regexp(self):
         """
-        Получение ключевых слов для таблицы.
+        Получение регулярки для таблицы.
+
+        Итоговое выражение имеет такой вид:
+
+        (?P<select>варианты для всех имён во всех контекстах)|(?P<update>...)|(?P...
 
         С таблицей проводятся операции select, insert, update, delete, truncate, drop.
         Имя таблицы может иметь следующий вид:
             * имя_таблицы
             * схема.имя_таблицы
             * база.схема.имя_таблицы
-        При этом любой сегмент имени может быть включён в [ ]
         Шаблоны для поиска:
             insert
-                into <tablename>
+                into tablename
             update
-                update <tablename>
+                update tablename
             truncate
-                truncate <tablename>
+                truncate tablename
             drop
-                drop table <tablename>
+                drop table tablename
             delete
-                delete from <tablename>
+                delete from tablename
             select
-                <tablename>,
-                join <tablename>
-                from <tablename> - хитрая инструкция, так как она может совпасть с delete_from
-        Для разрешения конфликта между select ... from и delete from 
-        вводится дополнительное ключевое слово contestive_select            
+                tablename,
+                join tablename
+                from tablename
         """
-        various_names = []
-        various_names.append(self.name)
-
-        kw_dict = {
-            "select": [],
-            "contestive_select": [],
-            "update": [],
-            "insert": [],
-            "delete": [],
-            "truncate": [],
-            "drop": [],
-        }
-        for kw in kw_dict:
+        various_names = [
+            self.name,
+            f"{self.schema}.{self.name}",
+            self.full_name
+        ]
+        chunks = []
+        for action in ["select", "update", "insert", "delete", "truncate", "drop"]:
+            chunks.append(fr"(?P<{action}>")
             for name in various_names:
-                if kw == "select":
-                    kw_dict[kw].append(f"join {name}")
-                    kw_dict[kw].append(f"{name},")
-                elif kw == "contestive_select":
-                    kw_dict[kw].append(f"from {name}")
-                elif kw == "update":
-                    kw_dict[kw].append(f"update {name}")
-                elif kw == "insert":
-                    kw_dict[kw].append(f"into {name}")
-                elif kw == "delete":
-                    kw_dict[kw].append(f"delete from {name}")
-                elif kw == "truncate":
-                    kw_dict[kw].append(f"truncate {name}")
-                elif kw == "drop":
-                    kw_dict[kw].append(f"drop table {name}")
-
-        return kw_dict
+                if action == "select":
+                    chunks.append(fr"\s*join {name} |\s*{name},|\s*from {name}[ ,]")
+                elif action == "update":
+                    chunks.append(fr"update {name} ")
+                elif action == "insert":
+                    chunks.append(fr"\s*into {name} ")
+                elif action == "delete":
+                    chunks.append(fr"delete from {name} ")
+                elif action == "truncate":
+                    chunks.append(fr"truncate {name} ")
+                elif action == "drop":
+                    chunks.append(fr"drop table {name} ")
+                if name != various_names[2]:
+                    chunks.append(r"|")
+            if action != "drop":
+                chunks.append(r")|")
+            else:
+                chunks.append(r")")
+        return "".join(chunks)
 
 
 class Database(Node):
