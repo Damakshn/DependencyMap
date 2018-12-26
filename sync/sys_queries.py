@@ -1,5 +1,11 @@
 from sqlalchemy.sql import text
 
+"""
+Здесь лежат запросы к системным таблицам SQL Server.
+Эти запросы используются для получения списков таблиц, процедур и других объектов,
+а также для извлечения метаданных.
+"""
+
 all_tables = text(
     """
     select
@@ -233,4 +239,10 @@ database_metadata = text(
 	where 
 		schema_id = 1
 		and type in ('U','TR', 'P', 'V', 'TF', 'FN')
+    """)
+
+get_referencing_objects = text(
+    """
+    SELECT referencing_id FROM
+    sys.dm_sql_referencing_entities(:obj_long_name,'OBJECT')
     """)

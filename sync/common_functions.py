@@ -31,11 +31,11 @@ def get_remaining_objects(session, cls) -> List[Node]:
     result.extend([item for item in session.new if isinstance(item, cls)])
     return result
 
-def sync_subordinate_members(originals, nodes, session, **refs):
+def sync_subordinate_members(originals: Dict, nodes: Dict, session, **refs):
     """
     Самый главный метод всей синхронизации.
 
-    Сопоставляет 2 списка объектов: актуальные объекты в исходниках на диске
+    Сопоставляет 2 словаря объектов: актуальные объекты в исходниках на диске
     и их реплики в виде объектов ORM, взятых из БД.
 
     Метод определяет, какие объекты должны быть созданы, изменены или удалены.
@@ -43,13 +43,10 @@ def sync_subordinate_members(originals, nodes, session, **refs):
     Четвёртый параметр - ссылки на другие ORM-модели, которые нужно 
     прикрепить при создании/обновлении.
     """
-    # превращаем поданные на вход списки в словари, чтобы их было проще сравнивать поэлементно
-    original_dict = make_named_dict(originals)
-    node_dict = make_named_dict(nodes)
-    for item in original_dict:
+    for item in originals:
         # объект есть на диске, но отсутствует в БД - создать
-        if item not in node_dict:
-            new_orm_object = make_node_from(original_dict[item], **refs)
+        if item not in nodes:
+            new_orm_object = make_node_from(originals[item], **refs)
             session.add(new_orm_object)
             # если новый объект не является корневым узлом, то
             # нужно создать связь от родительского объекта к нему
@@ -63,32 +60,12 @@ def sync_subordinate_members(originals, nodes, session, **refs):
                     session.add(Link(from_node=parent_table, to_node=new_orm_object))
                     session.add(Link(from_node=parent_db, to_node=new_orm_object))
         # объект есть и там, и там - сравнить и обновить, затем исключить объект из словаря
-        elif item in node_dict and needs_update(original_dict[item], node_dict[item]):
-            node_dict[item].update_from(original_dict[item], **refs)
-            del node_dict[item]
-    # в перечне объектов, лежащих сейчас в базе, остались только те, которые
-    # не имеют оригинала в исходниках, их надо удалить
-    for item in node_dict:
-        session.delete(node_dict[item])
-
-def make_named_dict(component_list) -> Dict:
-    """
-    Вспомогательный метод, упрощающий отсев объектов синхронизации.
-
-    Преобразует список объектов (выбранных из базы или полученных
-    из исходников) в словарь вида "идентификатор_компонента": компонент.
-
-    Имя поля-идентификатора зависит от класса упаковываемых объектов 
-    (определяется свойством key_field). 
-
-    Если на входе будет пустой список, на выходе будет пустой словарь.
-    """
-    result = {}
-    if component_list:
-        key = component_list[0].__class__.key_field()
-        for component in component_list:
-            result[getattr(component, key)] = component
-    return result
+        elif item in nodes and needs_update(originals[item], nodes[item]):
+            nodes[item].update_from(originals[item], **refs)
+            del nodes[item]
+    for item in nodes:
+        if item not in originals:
+            session.delete(nodes[item])
 
 def make_node_from(original, **refs) -> Node:
     """

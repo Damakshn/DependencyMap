@@ -13,7 +13,7 @@ class DelphiToolsException(Exception):
 class DelphiProject(Original):
 
     def __init__(self, path_to_dproj):
-        self.forms = []
+        self.forms = {}
         self.last_update = None
         # абсолютный путь к файлу проекта
         self.path = path_to_dproj        
@@ -46,13 +46,9 @@ class DelphiProject(Original):
                     # по максимальной среди форм дате обновления получаем дату обновления арма
                     if form_update > self.last_update:
                         self.last_update = form_update
-                    self.forms.append({"name": form_name, "path" :form_path, "last_update": form_update})
+                    self.forms[form_path] = {"name": form_name, "path" :form_path, "last_update": form_update}
         except ET.ParseError:
             raise DelphiToolsException(f"Не удалось распарсить файл проекта {self.path}")
-    
-    @classmethod
-    def key_field(cls):
-        return "path"
 
 
 class DelphiForm(Original):
@@ -79,7 +75,7 @@ class DelphiForm(Original):
         except DFMException as e:
                 self.is_broken = True
                 self.parsing_error_message = str(e)        
-        # формируем список компонентов
+        # формируем список компонентов, если форма распарсилась нормально
         if not self.is_broken:
             for key in self.data:
                 if DBComponent.is_db_component(self.data[key]):
@@ -88,20 +84,17 @@ class DelphiForm(Original):
     @property
     def connections(self):
         """
-        Список соединений формы
+        Словарь соединений формы
         """
-        return [c for c in self.components if isinstance(c, DelphiConnection)]
+        return {c.full_name: c for c in self.components if isinstance(c, DelphiConnection)}
     
     @property
     def queries(self):
         """
-        Список компонентов, содержащих запросы к БД.
+        Словарь компонентов, содержащих запросы к БД.
         """
-        return [c for c in self.components if isinstance(c, DelphiQuery)]
-    
-    @classmethod
-    def key_field(cls):
-        return "path"
+        return {c.name: c for c in self.components if isinstance(c, DelphiQuery)}
+
 
 class DBComponent(Original):
 
@@ -148,11 +141,8 @@ class DelphiConnection(DBComponent):
             if arg.startswith("Initial Catalog"):
                 self.database = arg.split("=")[1].strip()
                 break
-    
-    @classmethod
-    def key_field(cls):
-        return "full_name"
-        
+
+ 
     def __repr__(self):
         return f"{self.full_name} : TADOConnection; database: {self.database}"
 
@@ -180,7 +170,3 @@ class DelphiQuery(DBComponent):
             self.sql = "\n".join(query_strings)
         # контрольная сумма по тексту запроса
         self.crc32 = binascii.crc32(self.sql.encode("utf-8"))
-    
-    @classmethod
-    def key_field(cls):
-        return "name"

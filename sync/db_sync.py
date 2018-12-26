@@ -1,20 +1,33 @@
+from sqlalchemy.orm import selectinload, joinedload
+from .common_classes import SyncException
 from dpm.models import (
-    Database, 
+    Database,
     DBTable,
     DBScalarFunction,
     DBTableFunction,
     DBView,
     DBStoredProcedure,
     DBTrigger)
-from sqlalchemy.orm import selectinload, joinedload
 import sync.sys_queries as sys_queries
 import sync.original_models as original_models
 from .common_functions import (
     sync_subordinate_members,
     get_remaining_objects,
-    make_named_dict,
     make_node_from)
-from .common_classes import SyncException
+from typing import List, Dict
+import itertools
+
+def to_dict(dbname: str, cls, dataset):
+    """
+    Превращает набор строк в словарь объектов-оригиналов
+    выбранного класса;
+
+    Ключ - база.схема.название
+    """
+    return {
+        f"{dbname}.{row[1]}.{row[2]}":
+        cls(**row) for row in dataset
+    }
 
 def sync_database(base, session, conn):
     """
@@ -23,47 +36,47 @@ def sync_database(base, session, conn):
     # проверить дату последнего изменения метаданных базы
     meta = conn.execute(sys_queries.database_metadata).first()
     original_db = original_models.OriginalDatabase(**meta)
-    # если определения объектов БД были изменены, синхронизируемся
-    if original_db.last_update > base.last_update:
-        # вытаскиваем всю хранимую информацию по базе без ленивой загрузки
-        # todo add to database model fields for views, functions and so on
-        # todo write query for database
-        base = session.query(Database).options(
-            selectinload(Database.views),
-            selectinload(Database.procedures),
-            selectinload(Database.table_functions),
-            selectinload(Database.scalar_functions),
-            selectinload(Database.tables),
-            selectinload(Database.triggers)).filter(Database.id == base.id).one()
-        base.update_from(original_db)
-        # синхронизируем по очереди все типы объектов
-        # процедуры
-        proc_data_set = conn.execute(sys_queries.all_procedures)
-        procedures = [original_models.OriginalProcedure(**row) for row in proc_data_set]
-        sync_subordinate_members(procedures, base.procedures, session, parent=base)
-        # представления
-        views_data_set = conn.execute(sys_queries.all_views)
-        views = [original_models.OriginalView(**row) for row in views_data_set]
-        sync_subordinate_members(views, base.views, session, parent=base)
-        # табличные функции
-        tabfunc_data_set = conn.execute(sys_queries.all_table_functions)
-        tfunctions = [original_models.OriginalTableFunction(**row) for row in tabfunc_data_set]
-        sync_subordinate_members(tfunctions, base.table_functions, session, parent=base)
-        # скалярные функции
-        sfunc_data_set = conn.execute(sys_queries.all_scalar_functions)
-        sfunctions = [original_models.OriginalScalarFunction(**row) for row in sfunc_data_set]
-        sync_subordinate_members(sfunctions, base.scalar_functions, session, parent=base)
-        # таблицы
-        tables_data_set = conn.execute(sys_queries.all_tables)
-        tables = [original_models.OriginalTable(**row) for row in tables_data_set]
-        sync_subordinate_members(tables, base.tables, session, parent=base)
-        # триггеры для оставшихся таблиц
-        remaining_tables = get_remaining_objects(session, DBTable)
-        for table in remaining_tables:
-            triggers_data_set = conn.execute(
-                sys_queries.triggers_for_table, table_id=table.database_object_id)
-            triggers = [original_models.OriginalTrigger(**row) for row in triggers_data_set]
-            sync_subordinate_members(triggers, table.triggers, session, table=table, database=base)
+    # если в оригинале не было изменений, выходим
+    if original_db.last_update == base.last_update:
+        return
+    # вытаскиваем всю хранимую информацию по базе без ленивой загрузки
+    base = session.query(Database).options(
+        selectinload(Database.views),
+        selectinload(Database.procedures),
+        selectinload(Database.table_functions),
+        selectinload(Database.scalar_functions),
+        selectinload(Database.tables),
+        selectinload(Database.triggers)).filter(Database.id == base.id).one()
+    # синхронизируем по очереди все типы объектов
+    # процедуры
+    proc_data_set = conn.execute(sys_queries.all_procedures)
+    procedures = to_dict(base.name, original_models.OriginalProcedure, proc_data_set)
+    sync_subordinate_members(procedures, base.procedures, session, parent=base)
+    # представления
+    views_data_set = conn.execute(sys_queries.all_views)
+    views = to_dict(base.name, original_models.OriginalView, views_data_set)
+    sync_subordinate_members(views, base.views, session, parent=base)
+    # табличные функции
+    tabfunc_data_set = conn.execute(sys_queries.all_table_functions)
+    tfunctions = to_dict(base.name, original_models.OriginalTableFunction, tabfunc_data_set)
+    sync_subordinate_members(tfunctions, base.table_functions, session, parent=base)
+    # скалярные функции
+    sfunc_data_set = conn.execute(sys_queries.all_scalar_functions)
+    sfunctions = to_dict(base.name, original_models.OriginalScalarFunction, sfunc_data_set)
+    sync_subordinate_members(sfunctions, base.scalar_functions, session, parent=base)
+    # таблицы
+    tables_data_set = conn.execute(sys_queries.all_tables)
+    tables = to_dict(base.name, original_models.OriginalTable, tables_data_set)
+    sync_subordinate_members(tables, base.tables, session, parent=base)
+    # сопоставляем триггеры для оставшихся таблиц
+    for table_name in base.tables:
+        table = base.tables[table_name]
+        triggers_data_set = conn.execute(
+            sys_queries.triggers_for_table, table_id=table.database_object_id)
+        triggers = to_dict(base.name, original_models.OriginalTrigger, triggers_data_set)
+        sync_subordinate_members(triggers, table.triggers, session, table=table, database=base)
+    # обновляем данные самой базы
+    base.update_from(original_db)
 
 def sync_separate_executable(ex, session, conn):
     """
@@ -120,12 +133,13 @@ def sync_separate_table(table, session, conn):
         # если оригинал был изменён, синхронизируемся
         if original_table.last_update > table.last_update:
             table = session.query(DBTable).options(selectinload(DBTable.triggers))\
-                .filter(DBTable.database_object_id == table.id).one()
+                .filter(DBTable.database_object_id == table.database_object_id).one()
             table.update_from(original_table)
             # тащим из базы все триггеры этой таблицы и сопоставляем их
-            original_triggers = []
+            original_triggers = {}
             for row in conn.execute(sys_queries.triggers_for_table, table_id=table.id):
-                original_triggers.append(original_models.OriginalTrigger(**row))
+                trigger = original_models.OriginalTrigger(**row)
+                original_triggers[trigger.name] = trigger
             sync_subordinate_members(original_triggers, table.triggers, session, parent=table)
     # если оригинал не найден в боевой базе, то удаляем таблицу
     else:

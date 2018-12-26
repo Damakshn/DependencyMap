@@ -5,7 +5,6 @@ from sqlalchemy.orm import selectinload, joinedload
 from .common_functions import (
     sync_subordinate_members,
     get_remaining_objects,
-    make_named_dict,
     make_node_from)
 from .common_classes import SyncException
 from dpm.models import (
@@ -13,14 +12,15 @@ from dpm.models import (
     Form, 
     ClientConnection, 
     ClientQuery, 
-    Link, 
+    Link,
     Node)
+from typing import List, Dict
 
-def sync_all_sources(delphi_dir_content, db_apps, session):
+def sync_all_sources(delphi_dir_content: List, db_apps: Dict, session):
     """
     Синхронизирует всю кодовую базу.
     """
-    projects = [DelphiProject(path) for path in delphi_dir_content]
+    projects = {path: DelphiProject(path) for path in delphi_dir_content}
     sync_subordinate_members(projects, db_apps, session)
     remaining_apps = get_remaining_objects(session, Application)
     ids = (item.id for item in remaining_apps)
@@ -29,9 +29,8 @@ def sync_all_sources(delphi_dir_content, db_apps, session):
     apps_to_work = session.query(Application).options(\
         selectinload(Application.connections).selectinload(Application.forms).\
         selectinload(Form.components)).filter(Application.id.in_(ids)).all()
-    projects_dict = make_named_dict(projects)
     for app in apps_to_work:
-        original = projects_dict[app.path]
+        original = projects[app.path]
         sync_app(original, app, session)
 
 def sync_separate_app(app, session):
@@ -76,12 +75,15 @@ def sync_separate_form(form, session):
         joinedload(Form.application).\
         selectinload(Application.connections)).\
         filter(Form.id == form.id).one()
-    connections = make_named_dict(form.application.connections)
     # обновляем саму форму
     form.update_from(parsed_form)
-    refs = {"parent": form, "connections": connections}
+    refs = {"parent": form, "connections": form.application.connections}
     # синхронизируем компоненты
-    sync_subordinate_members(parsed_form.queries, form.components, session, **refs)
+    sync_subordinate_members(
+        parsed_form.queries,
+        form.components,
+        session,
+        **refs)
 
 def sync_separate_component(component, session):
     """
@@ -117,25 +119,26 @@ def sync_app(project, app, session):
     с базами, затем синхронизируются формы и их компоненты.
     """
     app.update_from(project)
-    # разбираем оригиналы всех форм, входящих в проект
-    parsed_forms = [DelphiForm(form["path"]) for form in project.forms]
+    # разбираем оригиналы всех форм, входящих в проект, кладём в словарь, ключ - path
+    parsed_forms = {path: DelphiForm(path) for path in project.forms}
     # формируем список соединений арма с базами и синхронизируем его
-    connection_list = []
+    original_connections = {}
     for form in parsed_forms:
-        connection_list.extend(form.connections)
-    sync_subordinate_members(connection_list, app.connections, session, parent=app)
+        original_connections.update(parsed_forms[form].connections)
+    sync_subordinate_members(
+        original_connections,
+        app.connections,
+        session,
+        parent=app)
     # сопоставляем списки форм, входящих в проект
     sync_subordinate_members(parsed_forms, app.forms, session, parent=app)
-    # готовим синхронизацию компонентов форм
-    # получаем список форм, которые остаются в базе
-    remaining_forms = get_remaining_objects(session, Form)
-    # получаем перечень актуальных соединений арма
-    connections_dict = make_named_dict(get_remaining_objects(session, ClientConnection))
-    # составляем словарь оригинальных форм из исходников
-    parsed_forms_dict = make_named_dict(parsed_forms)
     # синхронизируем компонентых тех форм, которые остаются в базе
-    for f in remaining_forms:
+    for form in app.forms:
         # выбираем из словаря оригинальных форм ту, которая соответствует обновляемой форме
-        original = parsed_forms_dict[f.path]
-        refs = {"parent": f, "connections": connections_dict}
-        sync_subordinate_members(original.queries, f.components, session, **refs)
+        original = parsed_forms[form]
+        refs = {"parent": app.forms[form], "connections": app.connections}
+        sync_subordinate_members(
+            original.queries,
+            app.forms[form].components,
+            session,
+            **refs)

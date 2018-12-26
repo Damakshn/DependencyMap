@@ -1,5 +1,7 @@
 import re
 from .models import Link, Database, SQLQuery
+from sqlalchemy.sql import text
+
 
 def build_incoming_links_for(dbnode, session):
     """
@@ -29,18 +31,16 @@ def build_incoming_links_for(dbnode, session):
     # получаем все запросы "родной" базы объекта
     home_db_queries = session.query(SQLQuery).filter_by(database_id=dbnode.database_id)
     # склеиваем все исходники в единый текст
-    # сюда складываем границы запросов, в итоге получится [0, 650, 1433, ...], где каждое
-    # число означает позицию в склеенном тексте, где заканчивается очередной запрос.
-    boundaries = [0]
-    # ToDo мне не нравится переменная query_mapping, надо проверить, можно ли перебирать результат
-    # запроса по индексу
     query_mapping = {}
     total_length = 0
     for query in home_db_queries:
+        # запоминаем диапазоны в тексте, которые занимают запросы
+        # получится (0, 1201), (1202, 1500) и т.д.
+        # по этим значениям будем определять, в какой запрос мы попали
+        boundaries = (total_length, total_length + len(query.sql))
         # +1 к длине за перенос строки, который будет отделять один запрос от другого
         total_length = total_length + len(query.sql) + 1
-        boundaries.append(total_length)
-        query_mapping[total_length] = {
+        query_mapping[boundaries] = {
             "query": query,
             "link": None
         }
@@ -52,13 +52,14 @@ def build_incoming_links_for(dbnode, session):
         pos = match.span()[0]
         action = match.lastgroup
         # по позиции совпадения определяем, в какой запрос мы попали
-        for i in range(1, len(boundaries)):
-            if pos < boundaries[i] and pos >= boundaries[i-1]:
+        # не забываем, что ключ query_mapping - это кортеж
+        for start, end in query_mapping:
+            if pos >= start and pos < end:
                 # если связь ещё не создана - создаём, иначе - ставим в True 
                 # соответствующее поле уже готового объекта
-                if query_mapping[boundaries[i]]["link"] is None:
-                    query_mapping[boundaries[i]]["link"] = Link(
-                        from_node=query_mapping[boundaries[i]]["query"],
+                if query_mapping[(start,end)]["link"] is None:
+                    query_mapping[(start,end)]["link"] = Link(
+                        from_node=query_mapping[(start,end)]["query"],
                         to_node=dbnode,
                         exec=(action == "exec"),
                         select=(action == "select"),
@@ -68,9 +69,10 @@ def build_incoming_links_for(dbnode, session):
                         truncate=(action == "truncate"),
                         drop=(action == "drop")
                     )
-                    session.add(query_mapping[boundaries[i]]["link"])
+                    session.add(query_mapping[(start,end)]["link"])
                 else:
-                    query_mapping[boundaries[i]]["link"][match.lastgroup] = True
+                    #setattr(query_mapping[(start,end)]["link"], match.lastgroup, True)
+                    query_mapping[(start,end)]["link"][match.lastgroup] = True
                 break
         
     

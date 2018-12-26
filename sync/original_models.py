@@ -77,3 +77,7 @@ class OriginalScalarFunction(DBOriginal):
     name: str
     last_update: datetime.datetime
     sql: str
+
+@dataclass
+class OriginalSystemReferense(Original):
+    referencing_id: int
