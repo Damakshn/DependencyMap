@@ -1,12 +1,10 @@
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, Boolean, SmallInteger, event
-from sqlalchemy.orm import deferred, relationship, validates
+from sqlalchemy.orm import deferred, relationship
 from sqlalchemy.orm.collections import attribute_mapped_collection
 
 import binascii
 import datetime
-import re
-
 
 BaseDPM = declarative_base()
 
@@ -25,7 +23,7 @@ class Node(BaseDPM):
     # когда последний раз обновлялись связи
     last_revision = Column(DateTime)
     # когда последний раз сверялись с оригиналом
-    last_sync = Column(DateTime, default=datetime.datetime.now)
+    last_update = Column(DateTime)
     type = Column(String(50))
 
     __mapper_args__ = {
@@ -43,7 +41,7 @@ class Node(BaseDPM):
                 raise ModelException(f"Поле {field} не найдено в оригинале объекта {self.__class__}")
         for field in self.sync_fields:
             setattr(self, field, getattr(original, field))
-        self.last_sync = datetime.datetime.now()
+        self.last_update = getattr(original, "last_update", datetime.datetime.now())
 
     @classmethod
     def create_from(cls, original, **refs):
@@ -70,10 +68,7 @@ class Node(BaseDPM):
         return self.last_revision.strftime("%d.%m.%Y %H:%M")
     
     def get_formatted_update_date(self):
-        if hasattr(self, "last_update"):
-            return self.last_update.strftime("%d.%m.%Y %H:%M")
-        else:
-            return None
+        return self.last_update.strftime("%d.%m.%Y %H:%M")
     
     def get_regexp(self):
         """
@@ -132,12 +127,12 @@ class Link(BaseDPM):
     drop = Column(SmallInteger, default=0)
 
     def __repr__(self):
-        if isinstance(self.from_node, DBQuery):
+        if isinstance(self.from_node, DBScript):
             from_node_name = self.from_node.full_name
         else:
             from_node_name = self.from_node.name
 
-        if isinstance(self.to_node, DBQuery):
+        if isinstance(self.to_node, DBScript):
             to_node_name = self.to_node.full_name
         else:
             to_node_name = self.to_node.name
@@ -145,21 +140,15 @@ class Link(BaseDPM):
 
 # добавляем классу Node зависимости от Link
 # входящие и исходящие связи
-Node.dependent_objects = relationship("Link", foreign_keys=[Link.to_node_id])
-Node.depends_on = relationship("Link", foreign_keys=[Link.from_node_id])
+Node.links_in = relationship("Link", foreign_keys=[Link.to_node_id])
+Node.links_out = relationship("Link", foreign_keys=[Link.from_node_id])
 
 
-class SourceCodeFile():
+class SourceCodeFileMixin():
     """
     Файл с исходниками программы, хранящийся на диске.
-    При синхронизации идентифицируется по пути к нему.
     """
     path = Column(String(1000), nullable=False)
-    last_update = Column(DateTime)
-
-    @property
-    def sync_fields(self):
-        return ["last_update"]
 
 class DatabaseObject(Node):
     __tablename__ = "DatabaseObject"
@@ -172,7 +161,6 @@ class DatabaseObject(Node):
     # id объекта в оригинальной базе (для точечного обновления)
     database_object_id = Column(Integer, nullable=False)
     schema = Column(String(30), nullable=False)
-    last_update = Column(DateTime)
 
     @property
     def long_name(self):
@@ -186,89 +174,11 @@ class DatabaseObject(Node):
 class SQLQueryMixin():
     """
     Произвольный SQL-запрос.
-
-    Содержит метод валидации, подготавливающий код к обработке
-    поисковыми регулярками.
     """
+    crc32 = Column(Integer)
     @declared_attr
     def sql(cls):
         return deferred(Column(Text, nullable=False))
-    
-    @validates('sql')
-    def __clear_sql(self, key, sql):
-        """
-        Изменяет sql-исходники, подготавливая их для поискового алгоритма.
-
-        Весь код приводится к нижнему регистру, удаляются комментарии, 
-        лишние пробелы и квадратные скобки; добавляется пробел после запятой.
-        """
-        def remove_comments(source: str) -> str:
-            """
-            Вспомогательная функция, удаляющая комментарии из sql.
-
-            По факту, данный код не удаляет комментарии из текста,
-            а вырезает текст вокруг комментариев, складывает его в список, 
-            который затем склеивается.
-
-            При проходе по файлу функция также отслеживает и кавычки, чтобы 
-            не было ошибки при принятии /*, */ или -- в кавычках за комментарий.
-            """
-            # флаги, говорящие о том, что сейчас мы стоим внутри строчного
-            # комментария или внутри строки в кавычках
-            in_line = False
-            in_string = False
-            # уровень вложенности блочного комментария
-            in_block = 0
-            # позиция, с которой будет копироваться текст за пределами комментов
-            start_pos = 0
-            # буфер, в который мы будем класть куски текста за пределами комментариев
-            chunks = []
-            for pos in range(len(source)-1):
-                if source[pos] == "'":
-                    in_string = not (in_block or in_line) and not in_string
-                elif source[pos] == "/" and source[pos+1] == "*":
-                    # сочетание /* имеет значение, если ранее не была открыта
-                    # строка или строчный комментарий
-                    in_block = 0 if any([in_string, in_line]) else in_block + 1
-                    # если это первый блочный комментарий, копируем в буфер весь текст до него
-                    # если это уже не первое /*, то оно считается уже внутри того
-                    # комментария, который был открыт первым
-                    if in_block == 1:
-                        chunks.append(source[start_pos:pos])
-                elif source[pos] == "*" and source[pos+1] == "/":
-                    # если нашлась закрывающая скобка блочного комментария, то
-                    # уменьшаем уровень вложенности на 1;
-                    # считается только та скобка, которая не закрыта кавычкой или 
-                    # строчным комментарием;
-                    # если эта скобка - последняя, то смещаем start_pos к этому месту
-                    # в тексте, чтобы при копировании перескочить комментарий
-                    if in_block > 0 and all([not in_string, not in_line]):
-                        in_block -= 1
-                        if in_block == 0:
-                            start_pos = pos + 2
-                elif all([source[pos] == "-", source[pos+1] == "-", not in_line, not in_string, not in_block]):
-                    # отлов строчного комментария - начало
-                    in_line = True
-                    chunks.append(source[start_pos:pos])
-                elif source[pos] == "\n" and in_line:
-                    # отлов строчного комментария - конец
-                    in_line = False
-                    start_pos = pos + 1
-            # закидываем в буфер то, что осталось
-            chunks.append(source[start_pos:len(source)])
-            return "".join(chunks)
-        
-        # ----------- основная функция обработки sql -----------
-        extra_spaces_and_line_breaks = r"\s+"
-        # todo разобраться в lookahead
-        comma_no_space = r"(?<=,)(?=[^\s])"
-        square_brackets = r"[\[\]]"
-        sql = sql.lower()
-        sql = remove_comments(sql)
-        sql = re.sub(extra_spaces_and_line_breaks, " ", sql)
-        sql = re.sub(comma_no_space, " ", sql)
-        sql = re.sub(square_brackets, "", sql)
-        return sql
 
 
 class ClientQuery(Node, SQLQueryMixin):
@@ -292,7 +202,7 @@ class ClientQuery(Node, SQLQueryMixin):
 
     @property
     def sync_fields(self):
-        return ["sql", "component_type"]
+        return ["sql", "component_type", "crc32"]
 
     @classmethod
     def create_from(cls, original, **refs):
@@ -300,6 +210,9 @@ class ClientQuery(Node, SQLQueryMixin):
         Собирает ORM-модель для компонента Delphi.
         Исходные данные берутся из оригинального компонента с диска,
         к модели присоединяются ссылки на форму и на соединение с БД.
+
+        Дата обновления ставится немножко костыльно, так как узнать реальную дату
+        обновления компонента невозможно.
         """
         for param in ["parent", "connections"]:
             if param not in refs:
@@ -311,6 +224,8 @@ class ClientQuery(Node, SQLQueryMixin):
             name=original.name,
             sql=original.sql,
             component_type=original.type,
+            last_update=datetime.datetime.now(),
+            crc32=original.crc32,
             connection=refs["connections"].get(original.connection, None),
             form=refs["parent"]
         )
@@ -318,7 +233,7 @@ class ClientQuery(Node, SQLQueryMixin):
     def __repr__(self):
         return f"{self.name}: {self.component_type} "
 
-class Form(Node, SourceCodeFile):
+class Form(Node, SourceCodeFileMixin):
     """
     Delphi-форма с компонентами.
     """
@@ -345,7 +260,7 @@ class Form(Node, SourceCodeFile):
 
     @property
     def sync_fields(self):
-        return ["last_update", "alias", "is_broken", "parsing_error_message"]
+        return ["alias", "is_broken", "parsing_error_message"]
 
     @classmethod
     def create_from(cls, original, **refs):
@@ -414,7 +329,7 @@ class ClientConnection(Node):
         return f"Соединение {self.name} ({'???' if self.database is None else self.database.name})"
 
 
-class Application(Node, SourceCodeFile):
+class Application(Node, SourceCodeFileMixin):
     """
     Клиентское приложение, написанное на Delphi.
     """
@@ -455,16 +370,20 @@ class Application(Node, SourceCodeFile):
         return self.name
 
 
-class DBQuery(DatabaseObject, SQLQueryMixin):
+class DBScript(DatabaseObject, SQLQueryMixin):
     """
     Процедура/функция/представление из базы данных исследуемой системы.
     """
-    __tablename__ = "DBQuery"
+    __tablename__ = "DBScript"
     id = Column(Integer, ForeignKey("DatabaseObject.id"), primary_key=True)
     database = relationship(
         "Database",
         back_populates="executables",
         foreign_keys=[DatabaseObject.database_id])
+    references = relationship(
+        "SystemReference",
+        collection_class=attribute_mapped_collection("database_object_id"),
+        back_populates="script")
 
     __mapper_args__ = {
         "polymorphic_identity":"Запрос в БД"
@@ -487,21 +406,43 @@ class DBQuery(DatabaseObject, SQLQueryMixin):
             schema=original.schema,
             database_name=refs["parent"].name,
             sql=original.sql,
+            crc32=original.crc32,
             last_update=original.last_update,
             database_object_id=original.database_object_id,
             database=refs["parent"]
         )
     
+    @property
+    def sync_fields(self):
+        return ["sql", "crc32"]
+    
     def get_regexp(self):
         return []
 
 
-class DBView(DBQuery):
+class SystemReference(BaseDPM):
+    """
+    Зависимость между объектами БД, подтянутая из системных таблиц
+    SQL Server.
+    """
+    __tablename__ = "SystemReference"
+    id = Column(Integer, primary_key=True)
+    script_id = Column(Integer, ForeignKey("DBScript.id"), nullable=False)
+    script = relationship(
+        "DBScript",
+        back_populates="references")
+    # id объекта, от которого зависит скрипт
+    database_object_id = Column(Integer, nullable=False)
+    # ставится в True после проверки скрипта алгоритмом анализа связей
+    is_checked = Column(Boolean, nullable=False, default=False)
+
+
+class DBView(DBScript):
     """
     Представление базы данных.
     """
     __tablename__ = "DBView"
-    id = Column(ForeignKey("DBQuery.id"), primary_key=True)
+    id = Column(ForeignKey("DBScript.id"), primary_key=True)
     __mapper_args__ = {
         "polymorphic_identity":"Представление"
     }
@@ -510,12 +451,12 @@ class DBView(DBQuery):
         return f"{self.full_name} : Представление"
 
 
-class DBScalarFunction(DBQuery):
+class DBScalarFunction(DBScript):
     """
     Скалярная функция базы данных.
     """
     __tablename__ = "DBScalarFunction"
-    id = Column(ForeignKey("DBQuery.id"), primary_key=True)
+    id = Column(ForeignKey("DBScript.id"), primary_key=True)
     __mapper_args__ = {
         "polymorphic_identity":"Скалярная функция"
     }
@@ -524,12 +465,12 @@ class DBScalarFunction(DBQuery):
         return f"{self.full_name} : Скалярная функция"
 
 
-class DBTableFunction(DBQuery):
+class DBTableFunction(DBScript):
     """
     Табличная функция базы данных.
     """
     __tablename__ = "DBTableFunction"
-    id = Column(ForeignKey("DBQuery.id"), primary_key=True)
+    id = Column(ForeignKey("DBScript.id"), primary_key=True)
     __mapper_args__ = {
         "polymorphic_identity":"Табличная функция"
     }
@@ -538,12 +479,12 @@ class DBTableFunction(DBQuery):
         return f"{self.full_name} : Табличная функция"
 
 
-class DBStoredProcedure(DBQuery):
+class DBStoredProcedure(DBScript):
     """
     Хранимая процедура базы данных.
     """
     __tablename__ = "DBStoredProcedure"
-    id = Column(ForeignKey("DBQuery.id"), primary_key=True)
+    id = Column(ForeignKey("DBScript.id"), primary_key=True)
     __mapper_args__ = {
         "polymorphic_identity":"Хранимая процедура"
     }
@@ -552,12 +493,12 @@ class DBStoredProcedure(DBQuery):
         return f"{self.full_name} : Хранимая процедура"
 
 
-class DBTrigger(DBQuery):
+class DBTrigger(DBScript):
     """
     Триггер, привязанный к таблице.
     """
     __tablename__ = "DBTrigger"
-    id = Column(ForeignKey("DBQuery.id"), primary_key=True)
+    id = Column(ForeignKey("DBScript.id"), primary_key=True)
     table_id = Column(ForeignKey("DBTable.id"), nullable=False)
     table = relationship("DBTable", back_populates="triggers", foreign_keys=[table_id])
     is_update = Column(Boolean, nullable=False)
@@ -679,7 +620,6 @@ class Database(Node):
     """
     __tablename__ = "Database"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
-    last_update = Column(DateTime)
     tables = relationship(
         "DBTable",
         collection_class=attribute_mapped_collection("full_name"),
@@ -711,10 +651,10 @@ class Database(Node):
         back_populates="database",
         foreign_keys=[DBTrigger.database_id])
     executables = relationship(
-        "DBQuery",
+        "DBScript",
         collection_class=attribute_mapped_collection("full_name"),
         back_populates="database",
-        foreign_keys=[DBQuery.database_id])
+        foreign_keys=[DBScript.database_id])
     connections = relationship(
         "ClientConnection",
         collection_class=attribute_mapped_collection("name"),
@@ -724,10 +664,6 @@ class Database(Node):
     __mapper_args__ = {
         "polymorphic_identity":"База данных"
     }
-
-    @property
-    def sync_fields(self):
-        return ["last_update"]
 
     def __repr__(self):
         return self.name
