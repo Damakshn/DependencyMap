@@ -176,6 +176,7 @@ class SQLQueryMixin():
     Произвольный SQL-запрос.
     """
     crc32 = Column(Integer)
+    
     @declared_attr
     def sql(cls):
         return deferred(Column(Text, nullable=False))

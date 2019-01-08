@@ -5,6 +5,7 @@ from dfm import DFMLoader, DFMException
 import collections
 import binascii
 from .common_classes import Original
+from common_functions import clear_sql
 
 class DelphiToolsException(Exception):
     pass
@@ -168,5 +169,6 @@ class DelphiQuery(DBComponent):
                     query_strings.append("-- "+key+"\n")
                     query_strings.extend(data[key])
             self.sql = "\n".join(query_strings)
+        self.sql = clear_sql(self.sql)
         # контрольная сумма по тексту запроса
         self.crc32 = binascii.crc32(self.sql.encode("utf-8"))
