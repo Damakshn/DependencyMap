@@ -318,6 +318,10 @@ class ClientConnection(Node):
 
     @classmethod
     def create_from(cls, original, **refs):
+        """
+        Создаёт модель клиентского соединения из оригинального
+        компонента в исходниках
+        """
         if "parent" not in refs:
             raise ModelException("Пропущен именованный параметр parent")
         return ClientConnection(

@@ -27,6 +27,13 @@ class OriginalDatabaseObject(DBOriginal):
     """
     database_object_id: int
     schema: str
+    db_name: str
+    long_name: str = field(init=False)
+    full_name: str = field(init=False)
+
+    def __post_init__(self):
+        self.long_name = f"{self.schema}.{self.name}"
+        self.full_name = f"{self.db_name}.{self.schema}.{self.name}"
 
     @classmethod
     def query_all(cls):
@@ -38,11 +45,24 @@ class OriginalDatabaseObject(DBOriginal):
 
     @classmethod
     def get_all(cls, conn):
+        """
+        Возвращает коллекцию объектов-оригиналов, содержащую все объекты
+        данного типа из той базы, с которой работает соединение conn.
+
+        Тип коллекции - словарь, ключ - поле full_name, т.е. База.Схема.Название.
+        """
         query = cls.query_all
-        return [cls(**record) for record in conn.execute(query)]
+        # dict comprehension
+        return {
+            obj.full_name: obj 
+            for obj in [cls(**record) for record in conn.execute(query)]
+        }
     
     @classmethod
     def get_by_id(cls, conn, id):
+        """
+        Возвращает оригинал объекта по его object_id в базе данных.
+        """
         record = conn.execute(cls.query_by_id, id=id)
         if record:
             return cls(**record)
@@ -62,6 +82,7 @@ class OriginalScript(OriginalDatabaseObject):
         Вычищаем исходники при создании объекта и
         считаем контрольную сумму
         """
+        super().__post_init__()
         self.sql = clear_sql(self.sql)
         self.crc32 = binascii.crc32(self.sql.encode("utf-8"))
 
@@ -102,7 +123,8 @@ class OriginalTable(OriginalDatabaseObject):
                 t.name as name,
                 t.modify_date as last_update,
                 t.object_id as database_object_id,
-                s.name as [schema]
+                s.name as [schema],
+                DB_NAME() as db_name
             from
                 sys.tables t
                 join sys.schemas s on t.schema_id = s.schema_id""")
@@ -115,7 +137,8 @@ class OriginalTable(OriginalDatabaseObject):
                 t.name as name,
                 t.modify_date as last_update,
                 t.object_id as database_object_id,
-                s.name as [schema]
+                s.name as [schema],
+                DB_NAME() as db_name
             from
                 sys.tables t
                 join sys.schemas s on t.schema_id = s.schema_id
@@ -145,6 +168,7 @@ class OriginalTrigger(OriginalScript):
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
+                DB_NAME() as db_name,
                 m.definition as [sql],
                 o.parent_object_id as table_id,
                 OBJECTPROPERTY(m.object_id, 'ExecIsUpdateTrigger') AS is_update,
@@ -166,6 +190,7 @@ class OriginalTrigger(OriginalScript):
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
+                DB_NAME() as db_name,
                 m.definition as [sql],
                 o.parent_object_id as table_id,
                 OBJECTPROPERTY(m.object_id, 'ExecIsUpdateTrigger') AS is_update,
@@ -181,6 +206,12 @@ class OriginalTrigger(OriginalScript):
     
     @classmethod
     def get_triggers_for_table(cls, conn, table_id):
+        """
+        Возвращает коллекцию триггеров для одной таблицы по её object_id
+        в БД.
+
+        Тип коллекции - словарь, ключ - поле full_name.
+        """
         query = text(
             """
             select 
@@ -188,6 +219,7 @@ class OriginalTrigger(OriginalScript):
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
+                DB_NAME() as db_name,
                 m.definition as [sql],
                 o.parent_object_id as table_id,
                 OBJECTPROPERTY(m.object_id, 'ExecIsUpdateTrigger') AS is_update,
@@ -200,7 +232,14 @@ class OriginalTrigger(OriginalScript):
             where 
                 o.type = 'TR'
                 and o.parent_object_id = :table_id""")
-        return [cls(**record) for record in conn.execute(query, table_id=table_id)]
+        # dict comprehension
+        return {
+            obj.full_name: obj
+            for obj in [
+                cls(**record) 
+                for record in conn.execute(query, table_id=table_id)
+            ]
+        }
 
 
 @dataclass
@@ -218,6 +257,7 @@ class OriginalProcedure(OriginalScript):
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
+                DB_NAME() as db_name,
                 m.definition as [sql]
             from 
                 sys.sql_modules m
@@ -235,6 +275,7 @@ class OriginalProcedure(OriginalScript):
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
+                DB_NAME() as db_name,
                 m.definition as [sql]
             from 
                 sys.sql_modules m
@@ -260,6 +301,7 @@ class OriginalView(OriginalScript):
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
+                DB_NAME() as db_name,
                 m.definition as [sql]
             from 
                 sys.sql_modules m 
@@ -277,6 +319,7 @@ class OriginalView(OriginalScript):
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
+                DB_NAME() as db_name,
                 m.definition as [sql]
             from 
                 sys.sql_modules m 
@@ -302,6 +345,7 @@ class OriginalTableFunction(OriginalScript):
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
+                DB_NAME() as db_name,
                 m.definition as [sql]
             from 
                 sys.sql_modules m 
@@ -319,6 +363,7 @@ class OriginalTableFunction(OriginalScript):
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
+                DB_NAME() as db_name,
                 m.definition as [sql]
             from 
                 sys.sql_modules m 
@@ -344,6 +389,7 @@ class OriginalScalarFunction(OriginalScript):
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
+                DB_NAME() as db_name,
                 m.definition as [sql]
             from 
                 sys.sql_modules m 
@@ -361,6 +407,7 @@ class OriginalScalarFunction(OriginalScript):
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
+                DB_NAME() as db_name,
                 m.definition as [sql]
             from 
                 sys.sql_modules m 
@@ -375,12 +422,25 @@ class OriginalSystemReferense(Original):
     """
     Запись о системной зависимости из внутренних таблиц SQL Server
     """
-    referencing_id: int
+    referenced_id: int
 
     @classmethod
     def get_referenses_for_object(cls, conn, obj_long_name):
+        """
+        Возвращает коллекцию object_id объектов, от которых зависит объект, чьё
+        значение long_name (Схема.Название) передано в качестве аргумента.
+
+        Тип коллекции - словарь, ключ - object_id
+        """
         query = text(
             """
-            SELECT referencing_id FROM
-            sys.dm_sql_referencing_entities(:obj_long_name,'OBJECT')""")
-        return [cls(**record) for record in conn.execute(query, obj_long_name=obj_long_name)]
+            SELECT referenced_id FROM
+            sys.dm_sql_referenced_entities(:obj_long_name,'OBJECT')""")
+        # dict comprehension
+        return {
+            obj.referenced_id: obj
+            for obj in [
+                cls(**record) 
+                for record in conn.execute(query, obj_long_name=obj_long_name)
+            ]
+        }
