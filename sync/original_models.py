@@ -434,7 +434,7 @@ class OriginalSystemReferense(Original):
         """
         query = text(
             """
-            SELECT referenced_id FROM
+            SELECT distinct referenced_id FROM
             sys.dm_sql_referenced_entities(:obj_long_name,'OBJECT')""")
         # dict comprehension
         return {

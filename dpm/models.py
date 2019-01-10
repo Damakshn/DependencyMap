@@ -69,28 +69,6 @@ class Node(BaseDPM):
     
     def get_formatted_update_date(self):
         return self.last_update.strftime("%d.%m.%Y %H:%M")
-    
-    def get_regexp(self):
-        """
-        Получение регулярки для объекта.
-
-        Итоговое выражение имеет такой вид:
-
-        (?P<select>варианты для всех имён во всех контекстах)|(?P<update>...)|(?P...
-
-        С таблицей проводятся операции select, insert, update, delete, 
-        truncate, drop;
-
-        Имя объекта может иметь следующий вид:
-            * имя_объекта
-            * схема.имя_объекта
-            * база.схема.имя_объекта
-        
-        Одно и то же действие (вставка, выборка) может быть оформлено синтаксически по-разному;
-
-        Итоговое регулярное выражение формируется как комбинация всех этих вариантов.
-        """
-        raise NotImplementedError(f"Метод get_regexp не определён для класса {self.__class__}")
 
 
 class Link(BaseDPM):
@@ -179,6 +157,79 @@ class DatabaseObject(Node):
     @property
     def full_name(self):
         return f"{self.database_name}.{self.schema}.{self.name}"
+    
+    @property
+    def sql_actions(self):
+        """
+        Список действий, которые можно осуществлять с объектом
+        при его использовании в sql-коде.
+        """
+        return []
+    
+    def get_regexp_universal(self, actions, names):
+        """
+        Универсальный метод генерации регулярок для объектов БД.
+
+        actions - список действий, которые будем искать (select, exec, delete etc.)
+        names - список вариантов написания имени объекта (короткое, длинное, полное).
+
+        Одно и то же действие (вставка, выборка) может быть
+        оформлено синтаксически по-разному, итоговое регулярное 
+        выражение формируется как комбинация всех этих вариантов.
+
+        Результат имеет примерно такой вид:
+
+        (?P<select>варианты для всех имён во всех контекстах)|(?P<update>...)|(?P...
+
+        или
+
+        (?P<select> *join table1 | *table1,|from table1[ ,])|(?P<update>...)|(?P...
+        """
+        chunks = []
+        for action in actions:
+            chunks.append(fr"(?P<{action}>")
+            for name in names:
+                if action == "select":
+                    chunks.append(fr" *join {name} | *{name},|from {name}[ ,]")
+                elif action == "update":
+                    chunks.append(fr"update {name} ")
+                elif action == "insert":
+                    chunks.append(fr"into {name} |insert {name}")
+                elif action == "delete":
+                    chunks.append(fr"delete from {name} |delete {name} ")
+                elif action == "truncate":
+                    chunks.append(fr"truncate {name} ")
+                elif action == "drop":
+                    chunks.append(fr"drop table {name} ")
+                if name != names[len(names)-1]:
+                    chunks.append(r"|")
+            if action != actions[len(actions)-1]:
+                chunks.append(r")|")
+            else:
+                chunks.append(r")")
+        return "".join(chunks)
+    
+    def get_regexp_for_home_db(self):
+        """
+        Получение регулярки для поиска в скриптах "родной" БД.
+
+        В этом случае используются все три варианта написания имени объекта: короткое,
+        длинное и полное (Название, Схема.Название, БД.Схема.Название)
+        """
+        names = [
+            self.name,
+            f"{self.schema}.{self.name}",
+            self.full_name
+        ]
+        return self.get_regexp_universal(self.sql_actions, names)
+    
+    def get_regexp_for_external_db(self):
+        """
+        Получение регулярки для поиска в скриптах "чужой" БД.
+
+        В этом случае используются только полное имя объекта - БД.Схема.Название
+        """
+        return self.get_regexp_universal(self.sql_actions, [self.full_name])
 
 
 class SQLQueryMixin():
@@ -445,8 +496,13 @@ class DBScript(DatabaseObject, SQLQueryMixin):
     def sync_fields(self):
         return ["sql", "crc32"]
     
-    def get_regexp(self):
-        return []
+    @property
+    def sql_actions(self):
+        """
+        Список действий, которые можно осуществлять со скриптом
+        при его использовании в sql-коде.
+        """
+        return ["select", "exec"]
 
 
 class SystemReference(BaseDPM):
@@ -599,53 +655,13 @@ class DBTable(DatabaseObject):
             database=refs["parent"]
         )
     
-    def get_regexp(self):
+    @property
+    def sql_actions(self):
         """
-        Получение регулярки для таблицы.
-
-        Итоговое выражение имеет такой вид:
-
-        (?P<select>варианты для всех имён во всех контекстах)|(?P<update>...)|(?P...
-
-        С таблицей проводятся операции select, insert, update, delete, truncate, drop.
-
-        Имя таблицы может иметь следующий вид:
-            * имя_таблицы
-            * схема.имя_таблицы
-            * база.схема.имя_таблицы
-        
-        Одно и то же действие (вставка, выборка) может быть оформлено синтаксически по-разному;
-
-        Итоговое регулярное выражение формируется как комбинация всех этих вариантов.
+        Список действий, которые можно осуществлять с таблицей
+        при обращении к ней в sql-коде.
         """
-        various_names = [
-            self.name,
-            f"{self.schema}.{self.name}",
-            self.full_name
-        ]
-        chunks = []
-        for action in ["select", "update", "insert", "delete", "truncate", "drop"]:
-            chunks.append(fr"(?P<{action}>")
-            for name in various_names:
-                if action == "select":
-                    chunks.append(fr" *join {name} | *{name},|from {name}[ ,]")
-                elif action == "update":
-                    chunks.append(fr"update {name} ")
-                elif action == "insert":
-                    chunks.append(fr"into {name} |insert {name}")
-                elif action == "delete":
-                    chunks.append(fr"delete from {name} |delete {name} ")
-                elif action == "truncate":
-                    chunks.append(fr"truncate {name} ")
-                elif action == "drop":
-                    chunks.append(fr"drop table {name} ")
-                if name != various_names[2]:
-                    chunks.append(r"|")
-            if action != "drop":
-                chunks.append(r")|")
-            else:
-                chunks.append(r")")
-        return "".join(chunks)
+        return ["select", "update", "insert", "delete", "truncate", "drop"]
 
 
 class Database(Node):
