@@ -140,8 +140,16 @@ class Link(BaseDPM):
 
 # добавляем классу Node зависимости от Link
 # входящие и исходящие связи
-Node.links_in = relationship("Link", foreign_keys=[Link.to_node_id])
-Node.links_out = relationship("Link", foreign_keys=[Link.from_node_id])
+Node.links_in = relationship(
+    "Link",
+    foreign_keys=[Link.to_node_id],
+    cascade="all, delete",
+    passive_deletes=True)
+Node.links_out = relationship(
+    "Link",
+    foreign_keys=[Link.from_node_id],
+    cascade="all, delete",
+    passive_deletes=True)
 
 
 class SourceCodeFileMixin():
@@ -157,7 +165,9 @@ class DatabaseObject(Node):
     # имя базы данных добавлено для того, чтобы не провоцировать срабатывание 
     # session.flush при запросе свойства full_name
     database_name = Column(String(120), nullable=False)
-    database = relationship("Database", foreign_keys=[database_id])
+    database = relationship(
+        "Database",
+        foreign_keys=[database_id])
     # id объекта в оригинальной базе (для точечного обновления)
     database_object_id = Column(Integer, nullable=False)
     schema = Column(String(30), nullable=False)
@@ -250,7 +260,9 @@ class Form(Node, SourceCodeFileMixin):
         "ClientQuery",
         collection_class=attribute_mapped_collection("name"),
         back_populates="form",
-        foreign_keys=[ClientQuery.form_id])
+        foreign_keys=[ClientQuery.form_id],
+        cascade='all, delete',
+        passive_deletes=True)
     # на случай, если форму не удалось распарсить
     is_broken = Column(Boolean, default=False, nullable=False)
     parsing_error_message = Column(String(300))
@@ -293,12 +305,18 @@ class ClientConnection(Node):
     __tablename__ = "ClientConnection"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
     application_id = Column(ForeignKey("Application.id"), nullable=False)
-    application = relationship("Application", foreign_keys=[application_id], back_populates="connections")
+    application = relationship(
+        "Application",
+        foreign_keys=[application_id],
+        back_populates="connections")
     # заполняется при создании из компонента
     database_name = Column(String(50))
     # ссылка на конкретную базу устанавливается в ходе верификации
     database_id = Column(ForeignKey("Database.id"))
-    database = relationship("Database", back_populates="connections", foreign_keys=[database_id])
+    database = relationship(
+        "Database",
+        back_populates="connections",
+        foreign_keys=[database_id])
     components = relationship(
         "ClientQuery",
         collection_class=attribute_mapped_collection("name"),
@@ -344,12 +362,16 @@ class Application(Node, SourceCodeFileMixin):
         "Form",
         collection_class=attribute_mapped_collection("path"),
         back_populates="application",
-        foreign_keys=[Form.application_id])
+        foreign_keys=[Form.application_id],
+        cascade="all, delete",
+        passive_deletes=True)
     connections = relationship(
         "ClientConnection",
         collection_class=attribute_mapped_collection("name"),
         back_populates="application",
-        foreign_keys=[ClientConnection.application_id])
+        foreign_keys=[ClientConnection.application_id],
+        cascade="all, delete",
+        passive_deletes=True)
 
     __mapper_args__ = {
         "polymorphic_identity":"АРМ"
@@ -388,7 +410,9 @@ class DBScript(DatabaseObject, SQLQueryMixin):
     references = relationship(
         "SystemReference",
         collection_class=attribute_mapped_collection("database_object_id"),
-        back_populates="script")
+        back_populates="script",
+        cascade="all, delete",
+        passive_deletes=True)
 
     __mapper_args__ = {
         "polymorphic_identity":"Запрос в БД"
@@ -505,7 +529,10 @@ class DBTrigger(DBScript):
     __tablename__ = "DBTrigger"
     id = Column(ForeignKey("DBScript.id"), primary_key=True)
     table_id = Column(ForeignKey("DBTable.id"), nullable=False)
-    table = relationship("DBTable", back_populates="triggers", foreign_keys=[table_id])
+    table = relationship(
+        "DBTable",
+        back_populates="triggers",
+        foreign_keys=[table_id])
     is_update = Column(Boolean, nullable=False)
     is_delete = Column(Boolean, nullable=False)
     is_insert = Column(Boolean, nullable=False)
@@ -548,7 +575,9 @@ class DBTable(DatabaseObject):
     triggers = relationship(
         "DBTrigger",
         collection_class=attribute_mapped_collection("full_name"),
-        back_populates="table", foreign_keys=[DBTrigger.table_id])
+        back_populates="table", foreign_keys=[DBTrigger.table_id],
+        cascade="all, delete",
+        passive_deletes=True)
 
     __mapper_args__ = {
         "polymorphic_identity":"Таблица"
@@ -629,37 +658,51 @@ class Database(Node):
         "DBTable",
         collection_class=attribute_mapped_collection("full_name"),
         back_populates="database",
-        foreign_keys=[DBTable.database_id])
+        foreign_keys=[DBTable.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
     views = relationship(
         "DBView",
         collection_class=attribute_mapped_collection("full_name"),
         back_populates="database",
-        foreign_keys=[DBView.database_id])
+        foreign_keys=[DBView.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
     procedures = relationship(
         "DBStoredProcedure",
         collection_class=attribute_mapped_collection("full_name"),
         back_populates="database",
-        foreign_keys=[DBStoredProcedure.database_id])
+        foreign_keys=[DBStoredProcedure.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
     table_functions = relationship(
         "DBTableFunction",
         collection_class=attribute_mapped_collection("full_name"),
         back_populates="database",
-        foreign_keys=[DBTableFunction.database_id])
+        foreign_keys=[DBTableFunction.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
     scalar_functions = relationship(
         "DBScalarFunction",
         collection_class=attribute_mapped_collection("full_name"),
         back_populates="database",
-        foreign_keys=[DBScalarFunction.database_id])
+        foreign_keys=[DBScalarFunction.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
     triggers = relationship(
         "DBTrigger",
         collection_class=attribute_mapped_collection("full_name"),
         back_populates="database",
-        foreign_keys=[DBTrigger.database_id])
-    executables = relationship(
+        foreign_keys=[DBTrigger.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
+    scripts = relationship(
         "DBScript",
         collection_class=attribute_mapped_collection("full_name"),
         back_populates="database",
-        foreign_keys=[DBScript.database_id])
+        foreign_keys=[DBScript.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
     connections = relationship(
         "ClientConnection",
         collection_class=attribute_mapped_collection("name"),
