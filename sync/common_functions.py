@@ -17,7 +17,8 @@ from dpm.models import (
     DBTableFunction,
     DBView,
     DBStoredProcedure,
-    DBTrigger)
+    DBTrigger,
+    SystemReference)
 from .delphi_classes import DelphiProject, DelphiForm, DelphiQuery, DelphiConnection
 import sync.original_models as original_models
 import re
@@ -32,12 +33,12 @@ def get_remaining_objects(session, cls) -> List[Node]:
     result.extend([item for item in session.new if isinstance(item, cls)])
     return result
 
-def sync_subordinate_members(originals: Dict, nodes: Dict, session, **refs):
+def sync_subordinate_members(originals: Dict, entities: Dict, session, **refs):
     """
     Самый главный метод всей синхронизации.
 
     Сопоставляет 2 словаря объектов: актуальные объекты в исходниках на диске
-    и их реплики в виде объектов ORM, взятых из БД.
+    или в боевой базе и их реплики в виде объектов ORM, взятых из базы DPM.
 
     Метод определяет, какие объекты должны быть созданы, изменены или удалены.
 
@@ -46,31 +47,30 @@ def sync_subordinate_members(originals: Dict, nodes: Dict, session, **refs):
     """
     for item in originals:
         # объект есть на диске, но отсутствует в БД - создать
-        if item not in nodes:
-            new_orm_object = make_node_from(originals[item], **refs)
-            session.add(new_orm_object)
+        if item not in entities:
+            new_entity = make_new_entity_from(originals[item], **refs)
+            session.add(new_entity)
             # если новый объект не является корневым узлом, то
             # нужно создать связь от родительского объекта к нему
-            if not new_orm_object.is_root:
-                if not isinstance(new_orm_object, DBTrigger):
+            if isinstance(new_entity, Node) and not new_entity.is_root:
+                if not isinstance(new_entity, DBTrigger):
                     parent = refs["parent"]
-                    session.add(Link(from_node=parent, to_node=new_orm_object))
+                    session.add(Link(from_node=parent, to_node=new_entity))
                 else:
                     parent_table = refs["table"]
                     parent_db = refs["database"]
-                    session.add(Link(from_node=parent_table, to_node=new_orm_object))
-                    session.add(Link(from_node=parent_db, to_node=new_orm_object))
+                    session.add(Link(from_node=parent_table, to_node=new_entity))
+                    session.add(Link(from_node=parent_db, to_node=new_entity))
         # объект есть и там, и там - сравнить и обновить, затем исключить объект из словаря
-        elif item in nodes and needs_update(originals[item], nodes[item]):
-            nodes[item].update_from(originals[item], **refs)
-            del nodes[item]
-    for item in nodes:
+        elif item in entities and needs_update(originals[item], entities[item]):
+            entities[item].update_from(originals[item], **refs)
+    for item in entities:
         if item not in originals:
-            session.delete(nodes[item])
+            session.delete(entities[item])
 
-def make_node_from(original, **refs) -> Node:
+def make_new_entity_from(original, **refs) -> Node:
     """
-    Создаёт новую ноду, класс которой соответствует классу оригинала.
+    Создаёт новую системную сущность, класс которой соответствует классу оригинала.
 
     По-моему, этот метод ужасен.
     """
@@ -96,6 +96,9 @@ def make_node_from(original, **refs) -> Node:
         return DBScalarFunction.create_from(original, **refs)
     if isinstance(original, original_models.OriginalTable):
         return DBTable.create_from(original, **refs)
+    # системные зависимости (которые не являются нодами)
+    if isinstance(original, original_models.OriginalSystemReferense):
+        return SystemReference.create_from(original, **refs)
 
 def needs_update(original, node) -> bool:
     """

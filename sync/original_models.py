@@ -5,9 +5,6 @@ from dataclasses import dataclass, field
 from sqlalchemy.sql import text
 from common_functions import clear_sql
 
-# ToDo метод query_all и методы, возвращающие несколько объектов, должны возвращать словарь
-# словарь создаётся по длинному имени объектов, нужно изменить запросы, чтобы длинное имя там было
-
 
 class DBOriginal(Original):
     name: str

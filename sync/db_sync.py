@@ -7,7 +7,8 @@ from dpm.models import (
     DBTableFunction,
     DBView,
     DBStoredProcedure,
-    DBTrigger)
+    DBTrigger,
+    DBScript)
 import sync.original_models as original_models
 from .common_functions import (
     sync_subordinate_members,
@@ -28,12 +29,9 @@ def sync_database(base, session, conn):
         return
     # вытаскиваем всю хранимую информацию по базе без ленивой загрузки
     base = session.query(Database).options(
-        selectinload(Database.views),
-        selectinload(Database.procedures),
-        selectinload(Database.table_functions),
-        selectinload(Database.scalar_functions),
-        selectinload(Database.tables),
-        selectinload(Database.triggers)).filter(Database.id == base.id).one()
+        selectinload(Database.scripts).selectinload(DBScript.referenses),
+        selectinload(Database.tables)
+    ).filter(Database.id == base.id).one()
     # синхронизируем по очереди все типы объектов
     # процедуры
     proc_data_set = original_models.OriginalProcedure.get_all(conn)
@@ -56,6 +54,11 @@ def sync_database(base, session, conn):
         triggers_data_set = original_models.OriginalTrigger.get_triggers_for_table(
             conn, table.database_object_id)
         sync_subordinate_members(triggers_data_set, table.triggers, session, table=table, database=base)
+    for script_name in base.scripts:
+        script = base.scripts[script_name]
+        ref_data_set = original_models.\
+            OriginalSystemReferense.get_referenses_for_object(conn, script.long_name)
+        sync_subordinate_members(ref_data_set, script.referenses, session)
     # обновляем данные самой базы
     base.update_from(original_db)
 
@@ -99,7 +102,6 @@ def sync_separate_table(table, session, conn):
                 .filter(DBTable.database_object_id == table.database_object_id).one()
             table.update_from(original)
             # тащим из базы все триггеры этой таблицы и сопоставляем их
-            # ToDo должен быть словарь
             original_triggers = original_models.OriginalTrigger.get_triggers_for_table(conn, table.id)
             sync_subordinate_members(original_triggers, table.triggers, session, parent=table)
     # если оригинал не найден в боевой базе, то удаляем таблицу

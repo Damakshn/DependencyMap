@@ -13,9 +13,41 @@ class ModelException(Exception):
     pass
 
 
-class Node(BaseDPM):
+class SystemEntity(BaseDPM):
     """
-    Компоненты исследуемой информационной системы.
+    Объект иформационной системы. Имеет оригинал, извлекаемый либо из
+    исходников на Delphi, либо из боевой базы информационной системы.
+    """
+
+    def update_from(self, original):
+        """
+        Обновляет данные основных полей объекта данными из исходников.
+        """
+        # проверяем наличие всех синхронизируемых полей в оригинале
+        for field in self.sync_fields:
+            if not hasattr(original, field):
+                raise ModelException(f"Поле {field} не найдено в оригинале объекта {self.__class__}")
+        for field in self.sync_fields:
+            setattr(self, field, getattr(original, field))
+
+    @classmethod
+    def create_from(cls, original, **refs):
+        """
+        Создаёт экземпляр объекта из оригинала.
+
+        refs - ссылочные параметры, в классах потомках расписаны подробно.
+        """
+        raise NotImplementedError(f"Метод create_from не реализован для класса {cls}")
+
+    @property
+    def sync_fields(self):
+        return []
+
+
+class Node(SystemEntity):
+    """
+    Компоненты исследуемой информационной системы, которые
+    взаимодействуют друг с другом и соединяются связями.
     """
     __tablename__ = "Node"
     id = Column(Integer, primary_key=True)
@@ -35,22 +67,8 @@ class Node(BaseDPM):
         """
         Обновляет данные основных полей объекта данными из исходников.
         """
-        # проверяем наличие всех синхронизируемых полей в оригинале
-        for field in self.sync_fields:
-            if not hasattr(original, field):
-                raise ModelException(f"Поле {field} не найдено в оригинале объекта {self.__class__}")
-        for field in self.sync_fields:
-            setattr(self, field, getattr(original, field))
+        super().update_from(original)
         self.last_update = getattr(original, "last_update", datetime.datetime.now())
-
-    @classmethod
-    def create_from(cls, original, **refs):
-        """
-        Создаёт экземпляр ноды из оригинала.
-
-        refs - ссылочные параметры, в классах потомках расписаны подробно.
-        """
-        raise NotImplementedError(f"Метод create_from не реализован для класса {cls}")
 
     @property
     def sync_fields(self):
@@ -116,8 +134,11 @@ class Link(BaseDPM):
             to_node_name = self.to_node.name
         return f"{from_node_name} -> {to_node_name}"
 
-# добавляем классу Node зависимости от Link
-# входящие и исходящие связи
+"""
+добавляем классу Node зависимости от Link
+входящие и исходящие связи;
+при удалении ноды все входящие/исходящие связи тоже должны быть удалены
+"""
 Node.links_in = relationship(
     "Link",
     foreign_keys=[Link.to_node_id],
@@ -137,6 +158,28 @@ class SourceCodeFileMixin():
     path = Column(String(1000), nullable=False)
 
 class DatabaseObject(Node):
+    """
+    Объект, хранящийся в базе данных информационной системы
+    (таблица или скрипт (процедура, представление и т.д.)).
+
+    SQL Server идентифицирует все такие объекты внутренним object_id,
+    каждый объект привязан к определённой схеме внутри своей БД.
+
+    При взаимодействии с объектом могут использоваться 3 различных варианта
+    написания его имени - короткое (Имя), длинное (Схема.Имя) и полное
+    (База.Схема.Имя).
+
+    Каждый экземпляр этого класса умеет генерировать большое регулярное выражения
+    для поиска упоминаний этого объекта (процедуры, функции, таблицы и т.д.) в текстах
+    sql-запросов на клиенте или в БД. 
+    
+    Если, например, процедура из БД1 обращается к таблице из БД2, то допускается 
+    использовать только полное имя таблицы, поэтому регулярки для "родной" и 
+    для "чужой" базы отличаются. Запросы, направляемые с клиента (например из 
+    компонента TADOQuery) тоже работают в контексте определённой БД
+    (той, с которой соединяется подключённый к TADOQuery компонент TADOConnection),
+    поэтому данное правило распространяется и на них тоже.
+    """
     __tablename__ = "DatabaseObject"
     id = Column(ForeignKey("Node.id"), primary_key=True)
     database_id = Column(ForeignKey("Database.id"))
@@ -235,6 +278,10 @@ class DatabaseObject(Node):
 class SQLQueryMixin():
     """
     Произвольный SQL-запрос.
+
+    Помимо исходного кода самого запроса хранит также контрольную сумму,
+    которая проверяется при синхронизации с оригиналом для избежания ненужных
+    обновлений и, как следствие, пересчёта зависимостей.
     """
     crc32 = Column(Integer)
     
@@ -246,6 +293,15 @@ class SQLQueryMixin():
 class ClientQuery(Node, SQLQueryMixin):
     """
     Компонент Delphi, содержащий SQL-запрос.
+
+    Любой компонент привязан к какой-то форме в приложении и
+    взаимодействует с базой данных посредством компонента TADOConnection,
+    который за ним закреплён.
+
+    Чтобы синхронизировать компонент, необходимо прочитать .dfm-файл,
+    содержащий описание формы, на которой он расположен, из-за этого
+    невозможно вычленить точную дату, когда оригинал компонента был
+    изменён.
     """
     __tablename__ = "ClientQuery"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
@@ -298,6 +354,10 @@ class ClientQuery(Node, SQLQueryMixin):
 class Form(Node, SourceCodeFileMixin):
     """
     Delphi-форма с компонентами.
+
+    Если DFM-файл с описанием формы не удалось распарсить, то
+    поле is_broken ставится в True, а в поле parsing_error_message пишется
+    ошибка, которую выдал парсер.
     """
     __tablename__ = "Form"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
@@ -450,7 +510,7 @@ class Application(Node, SourceCodeFileMixin):
 
 class DBScript(DatabaseObject, SQLQueryMixin):
     """
-    Процедура/функция/представление из базы данных исследуемой системы.
+    Процедура/функция/представление/триггер из базы данных исследуемой системы.
     """
     __tablename__ = "DBScript"
     id = Column(Integer, ForeignKey("DatabaseObject.id"), primary_key=True)
@@ -460,7 +520,7 @@ class DBScript(DatabaseObject, SQLQueryMixin):
         foreign_keys=[DatabaseObject.database_id])
     references = relationship(
         "SystemReference",
-        collection_class=attribute_mapped_collection("database_object_id"),
+        collection_class=attribute_mapped_collection("referenced_id"),
         back_populates="script",
         cascade="all, delete",
         passive_deletes=True)
@@ -505,10 +565,20 @@ class DBScript(DatabaseObject, SQLQueryMixin):
         return ["select", "exec"]
 
 
-class SystemReference(BaseDPM):
+class SystemReference(SystemEntity):
     """
     Зависимость между объектами БД, подтянутая из системных таблиц
     SQL Server.
+
+    Не является нодой, не участвует в построении связей напрямую.
+
+    SQL Server для каждого скрипта хранит информацию о том, какие именно
+    объекты БД он использует, но не конкретизирует, что именно скрипт с ними
+    делает.
+
+    Информация об объектах, от которых зависит скрипт позволяет сузить круг
+    таблиц и/или других скриптов, упоминания которых нужно будет найти в тексте
+    запроса при помощи регулярных выражений и конкретизировать.
     """
     __tablename__ = "SystemReference"
     id = Column(Integer, primary_key=True)
@@ -517,9 +587,22 @@ class SystemReference(BaseDPM):
         "DBScript",
         back_populates="references")
     # id объекта, от которого зависит скрипт
-    database_object_id = Column(Integer, nullable=False)
+    referenced_id = Column(Integer, nullable=False)
     # ставится в True после проверки скрипта алгоритмом анализа связей
     is_checked = Column(Boolean, nullable=False, default=False)
+
+    def update_from(self, original):
+        super().update_from(original)
+        self.is_checked = False
+    
+    @classmethod
+    def create_from(cls, original, **refs):
+        if "parent" not in refs:
+            raise ModelException("Пропущен именованный параметр parent")
+        return SystemReference(
+            referenced_id=original.referenced_id,
+            script=refs["parent"],
+            is_checked=False)
 
 
 class DBView(DBScript):
