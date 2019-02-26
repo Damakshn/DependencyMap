@@ -12,8 +12,7 @@ from dpm.models import (
 import sync.original_models as original_models
 from .common_functions import (
     sync_subordinate_members,
-    get_remaining_objects,
-    make_node_from)
+    get_remaining_objects)
 from typing import List, Dict
 import itertools
 
@@ -29,7 +28,7 @@ def sync_database(base, session, conn):
         return
     # вытаскиваем всю хранимую информацию по базе без ленивой загрузки
     base = session.query(Database).options(
-        selectinload(Database.scripts).selectinload(DBScript.referenses),
+        selectinload(Database.scripts).selectinload(DBScript.references),
         selectinload(Database.tables)
     ).filter(Database.id == base.id).one()
     # синхронизируем по очереди все типы объектов
@@ -54,21 +53,23 @@ def sync_database(base, session, conn):
         triggers_data_set = original_models.OriginalTrigger.get_triggers_for_table(
             conn, table.database_object_id)
         sync_subordinate_members(triggers_data_set, table.triggers, session, table=table, database=base)
+    # синхронизируем системные зависимости скриптов
     for script_name in base.scripts:
         script = base.scripts[script_name]
         ref_data_set = original_models.\
-            OriginalSystemReferense.get_referenses_for_object(conn, script.long_name)
-        sync_subordinate_members(ref_data_set, script.referenses, session)
+            OriginalSystemReferense.get_references_for_object(conn, script.long_name)
+        sync_subordinate_members(ref_data_set, script.references, session, parent=script)
     # обновляем данные самой базы
     base.update_from(original_db)
 
+
 def sync_separate_script(script, session, conn):
     """
-    Синхронизирует отдельный выполняемый объект боевой БД 
+    Синхронизирует отдельный выполняемый объект боевой БД
     (представление, функцию, процедуру или триггер)
     """
-    # определяем класс оригинала и запрос, с помощью которого будем получать оригинал
-    # из боевой БД
+    # определяем класс оригинала и запрос, с помощью которого
+    # будем получать оригинализ боевой БД
     choices = {
         DBScalarFunction: original_models.OriginalScalarFunction,
         DBTableFunction: original_models.OriginalTableFunction,
@@ -87,6 +88,7 @@ def sync_separate_script(script, session, conn):
     else:
         # если оригинал не найден в боевой базе, то удаляем ноду
         session.delete(script)
+
 
 def sync_separate_table(table, session, conn):
     """

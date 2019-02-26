@@ -64,7 +64,6 @@ def prepare_test_sqlite_db(connector, config):
 	test_app = models.Application(
 		path=path_to_app,
 		name=app_name,
-		last_sync=d,
 		last_update=la
 	)
 	session.add(test_app)
@@ -72,13 +71,12 @@ def prepare_test_sqlite_db(connector, config):
 	testdb = models.Database(
 		name=test_db_name,
 		last_revision=la,
-		last_sync=la,
 		last_update=la
 	)
 	session.add(testdb)
 	session.flush()
 	# синхронизируем тестовый арм
-	sync_separate_app(test_app, session)
+	#sync_separate_app(test_app, session)
 	sync_database(testdb, session, conn)
 	session.commit()
 

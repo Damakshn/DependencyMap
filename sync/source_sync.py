@@ -1,20 +1,14 @@
 import os
 import datetime
-from .delphi_classes import DelphiProject, DelphiForm, DelphiQuery, DelphiConnection
-from sqlalchemy.orm import selectinload, joinedload
+from .delphi_classes import DelphiProject, DelphiForm
+from sqlalchemy.orm import selectinload
 from .common_functions import (
     sync_subordinate_members,
-    get_remaining_objects,
-    make_node_from)
+    get_remaining_objects)
 from .common_classes import SyncException
-from dpm.models import (
-    Application,
-    Form, 
-    ClientConnection, 
-    ClientQuery, 
-    Link,
-    Node)
+from dpm.models import Application, Form
 from typing import List, Dict
+
 
 def sync_all_sources(delphi_dir_content: List, db_apps: Dict, session):
     """
@@ -32,6 +26,7 @@ def sync_all_sources(delphi_dir_content: List, db_apps: Dict, session):
     for app in apps_to_work:
         original = projects[app.path]
         sync_app(original, app, session)
+
 
 def sync_separate_app(app, session):
     """
@@ -53,6 +48,7 @@ def sync_separate_app(app, session):
         selectinload(Form.components)).filter(Application.id == app.id).one()
     sync_app(project, app, session)
 
+
 def sync_separate_form(form, session):
     """
     Синхронизирует отдельно взятую форму.
@@ -70,7 +66,7 @@ def sync_separate_form(form, session):
     """
     Повторно запрашиваем форму из базы, достаём сразу
     информацию об АРМе, его соединениях и о компонентах формы.
-    """    
+    """
     form = session.query(Form).options(selectinload(Form.components).\
         joinedload(Form.application).\
         selectinload(Application.connections)).\
@@ -84,6 +80,7 @@ def sync_separate_form(form, session):
         form.components,
         session,
         **refs)
+
 
 def sync_separate_component(component, session):
     """

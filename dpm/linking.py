@@ -57,9 +57,9 @@ def build_incoming_links_for(dbnode, session):
             if pos >= start and pos < end:
                 # если связь ещё не создана - создаём, иначе - ставим в True 
                 # соответствующее поле уже готового объекта
-                if query_mapping[(start,end)]["link"] is None:
-                    query_mapping[(start,end)]["link"] = Link(
-                        from_node=query_mapping[(start,end)]["query"],
+                if query_mapping[(start, end)]["link"] is None:
+                    query_mapping[(start, end)]["link"] = Link(
+                        from_node=query_mapping[(start, end)]["query"],
                         to_node=dbnode,
                         exec=(action == "exec"),
                         select=(action == "select"),
@@ -69,7 +69,7 @@ def build_incoming_links_for(dbnode, session):
                         truncate=(action == "truncate"),
                         drop=(action == "drop")
                     )
-                    session.add(query_mapping[(start,end)]["link"])
+                    session.add(query_mapping[(start, end)]["link"])
                 else:
                     #setattr(query_mapping[(start,end)]["link"], match.lastgroup, True)
                     query_mapping[(start,end)]["link"][match.lastgroup] = True

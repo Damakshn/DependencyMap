@@ -3,9 +3,10 @@ import binascii
 from .common_classes import Original
 from dataclasses import dataclass, field
 from sqlalchemy.sql import text
-from common_functions import clear_sql
+from .mixins import SQLProcessorMixin
 
 
+@dataclass
 class DBOriginal(Original):
     name: str
     last_update: datetime.datetime
@@ -14,13 +15,14 @@ class DBOriginal(Original):
     def key_field(cls):
         return "name"
 
+
 @dataclass
 class OriginalDatabaseObject(DBOriginal):
     """
     Оригинал объекта базы данных
 
-    Помимо имени и даты обновления, хранит внутренний object_id объекта, 
-    которым пользуется SQL Server и имя схемы
+    Помимо имени и даты обновления, хранит внутренний object_id
+    объекта, которым пользуется SQL Server, а также имя схемы.
     """
     database_object_id: int
     schema: str
@@ -35,7 +37,7 @@ class OriginalDatabaseObject(DBOriginal):
     @classmethod
     def query_all(cls):
         return None
-    
+
     @classmethod
     def query_by_id(cls):
         return None
@@ -46,28 +48,29 @@ class OriginalDatabaseObject(DBOriginal):
         Возвращает коллекцию объектов-оригиналов, содержащую все объекты
         данного типа из той базы, с которой работает соединение conn.
 
-        Тип коллекции - словарь, ключ - поле full_name, т.е. База.Схема.Название.
+        Тип коллекции - словарь, ключ - поле full_name,
+        т.е. База.Схема.Название.
         """
-        query = cls.query_all
+        query = cls.query_all()
         # dict comprehension
         return {
-            obj.full_name: obj 
+            obj.full_name: obj
             for obj in [cls(**record) for record in conn.execute(query)]
         }
-    
+
     @classmethod
     def get_by_id(cls, conn, id):
         """
         Возвращает оригинал объекта по его object_id в базе данных.
         """
-        record = conn.execute(cls.query_by_id, id=id)
+        record = conn.execute(cls.query_by_id(), id=id)
         if record:
             return cls(**record)
         return None
 
 
 @dataclass
-class OriginalScript(OriginalDatabaseObject):
+class OriginalScript(OriginalDatabaseObject, SQLProcessorMixin):
     """
     Оригинал скриптового объекта (процедуры/функции и т.д.)
     """
@@ -80,13 +83,15 @@ class OriginalScript(OriginalDatabaseObject):
         считаем контрольную сумму
         """
         super().__post_init__()
-        self.sql = clear_sql(self.sql)
+        # очищаем sql методом из миксина
+        self.clear_sql()
         self.crc32 = binascii.crc32(self.sql.encode("utf-8"))
 
 
 @dataclass
 class OriginalDatabase(DBOriginal):
-    pass
+    name:str
+    last_update:datetime
 
     @classmethod
     def fetch_from_metadata(cls, conn):
@@ -100,11 +105,12 @@ class OriginalDatabase(DBOriginal):
                 max(modify_date) as last_update
             from
                 sys.objects
-            where 
+            where
                 schema_id = 1
                 and type in ('U','TR', 'P', 'V', 'TF', 'FN')""")
         meta = conn.execute(query).first()
         return cls(**meta)
+
 
 @dataclass
 class OriginalTable(OriginalDatabaseObject):
@@ -113,7 +119,7 @@ class OriginalTable(OriginalDatabaseObject):
     """
 
     @classmethod
-    def query_all(cls, conn):
+    def query_all(cls):
         return text(
             """
             select
@@ -125,7 +131,7 @@ class OriginalTable(OriginalDatabaseObject):
             from
                 sys.tables t
                 join sys.schemas s on t.schema_id = s.schema_id""")
-    
+
     @classmethod
     def query_by_id(cls):
         return text(
@@ -169,20 +175,20 @@ class OriginalTrigger(OriginalScript):
                 m.definition as [sql],
                 o.parent_object_id as table_id,
                 OBJECTPROPERTY(m.object_id, 'ExecIsUpdateTrigger') AS is_update,
-                OBJECTPROPERTY(m.object_id, 'ExecIsDeleteTrigger') AS is_delete, 
+                OBJECTPROPERTY(m.object_id, 'ExecIsDeleteTrigger') AS is_delete,
                 OBJECTPROPERTY(m.object_id, 'ExecIsInsertTrigger') AS is_insert
-            from 
+            from
                 sys.sql_modules m
                 join sys.objects o on o.object_id = m.object_id
                 join sys.schemas s on o.schema_id = s.schema_id
-            where 
+            where
                 o.type = 'TR'""")
-    
+
     @classmethod
     def query_by_id(cls):
         return text(
             """
-            select 
+            select
                 o.name as name,
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
@@ -191,16 +197,16 @@ class OriginalTrigger(OriginalScript):
                 m.definition as [sql],
                 o.parent_object_id as table_id,
                 OBJECTPROPERTY(m.object_id, 'ExecIsUpdateTrigger') AS is_update,
-                OBJECTPROPERTY(m.object_id, 'ExecIsDeleteTrigger') AS is_delete, 
+                OBJECTPROPERTY(m.object_id, 'ExecIsDeleteTrigger') AS is_delete,
                 OBJECTPROPERTY(m.object_id, 'ExecIsInsertTrigger') AS is_insert
-            from 
+            from
                 sys.sql_modules m
                 join sys.objects o on o.object_id = m.object_id
                 join sys.schemas s on o.schema_id = s.schema_id
-            where 
+            where
                 o.type = 'TR'
                 and m.object_id = :id""")
-    
+
     @classmethod
     def get_triggers_for_table(cls, conn, table_id):
         """
@@ -211,7 +217,7 @@ class OriginalTrigger(OriginalScript):
         """
         query = text(
             """
-            select 
+            select
                 o.name as name,
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
@@ -220,20 +226,20 @@ class OriginalTrigger(OriginalScript):
                 m.definition as [sql],
                 o.parent_object_id as table_id,
                 OBJECTPROPERTY(m.object_id, 'ExecIsUpdateTrigger') AS is_update,
-                OBJECTPROPERTY(m.object_id, 'ExecIsDeleteTrigger') AS is_delete, 
+                OBJECTPROPERTY(m.object_id, 'ExecIsDeleteTrigger') AS is_delete,
                 OBJECTPROPERTY(m.object_id, 'ExecIsInsertTrigger') AS is_insert
             from
                 sys.sql_modules m
                 join sys.objects o on o.object_id = m.object_id
                 join sys.schemas s on o.schema_id = s.schema_id
-            where 
+            where
                 o.type = 'TR'
                 and o.parent_object_id = :table_id""")
         # dict comprehension
         return {
             obj.full_name: obj
             for obj in [
-                cls(**record) 
+                cls(**record)
                 for record in conn.execute(query, table_id=table_id)
             ]
         }
@@ -256,29 +262,29 @@ class OriginalProcedure(OriginalScript):
                 s.name as [schema],
                 DB_NAME() as db_name,
                 m.definition as [sql]
-            from 
+            from
                 sys.sql_modules m
                 join sys.objects o on o.object_id = m.object_id
                 join sys.schemas s on o.schema_id = s.schema_id
-            where 
+            where
                 o.type = 'P'""")
-    
+
     @classmethod
     def query_by_id(cls):
         return text(
             """
-            select 
+            select
                 o.name as name,
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
                 DB_NAME() as db_name,
                 m.definition as [sql]
-            from 
+            from
                 sys.sql_modules m
                 join sys.objects o on o.object_id = m.object_id
                 join sys.schemas s on o.schema_id = s.schema_id
-            where 
+            where
                 o.type = 'P'
                 and m.object_id = :id""")
 
@@ -300,13 +306,13 @@ class OriginalView(OriginalScript):
                 s.name as [schema],
                 DB_NAME() as db_name,
                 m.definition as [sql]
-            from 
-                sys.sql_modules m 
+            from
+                sys.sql_modules m
                 join sys.objects o on o.object_id = m.object_id
                 join sys.schemas s on o.schema_id = s.schema_id
             where
                 o.type = 'V'""")
-    
+
     @classmethod
     def query_by_id(cls):
         return text(
@@ -318,8 +324,8 @@ class OriginalView(OriginalScript):
                 s.name as [schema],
                 DB_NAME() as db_name,
                 m.definition as [sql]
-            from 
-                sys.sql_modules m 
+            from
+                sys.sql_modules m
                 join sys.objects o on o.object_id = m.object_id
                 join sys.schemas s on o.schema_id = s.schema_id
             where
@@ -337,36 +343,36 @@ class OriginalTableFunction(OriginalScript):
     def query_all(cls):
         return text(
             """
-            select 
+            select
                 o.name as name,
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
                 DB_NAME() as db_name,
                 m.definition as [sql]
-            from 
-                sys.sql_modules m 
+            from
+                sys.sql_modules m
                 join sys.objects o on o.object_id = m.object_id
                 join sys.schemas s on o.schema_id = s.schema_id
             where
                 o.type = 'TF'""")
-    
+
     @classmethod
     def query_by_id(cls):
         return text(
             """
-            select 
+            select
                 o.name as name,
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
                 DB_NAME() as db_name,
                 m.definition as [sql]
-            from 
-                sys.sql_modules m 
+            from
+                sys.sql_modules m
                 join sys.objects o on o.object_id = m.object_id
                 join sys.schemas s on o.schema_id = s.schema_id
-            where 
+            where
                 o.type = 'TF'
                 and m.object_id = :id""")
 
@@ -375,44 +381,45 @@ class OriginalTableFunction(OriginalScript):
 class OriginalScalarFunction(OriginalScript):
     """
     Оригинал скалярной функции
-    """ 
+    """
 
     @classmethod
     def query_all(cls):
         return text(
             """
-            select 
+            select
                 o.name as name,
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
                 DB_NAME() as db_name,
                 m.definition as [sql]
-            from 
-                sys.sql_modules m 
+            from
+                sys.sql_modules m
                 join sys.objects o on o.object_id = m.object_id
                 join sys.schemas s on o.schema_id = s.schema_id
-            where 
+            where
                 o.type ='FN'""")
-    
+
     @classmethod
     def query_by_id(cls):
         return text(
             """
-            select 
+            select
                 o.name as name,
                 o.modify_date as last_update,
                 m.object_id as database_object_id,
                 s.name as [schema],
                 DB_NAME() as db_name,
                 m.definition as [sql]
-            from 
-                sys.sql_modules m 
+            from
+                sys.sql_modules m
                 join sys.objects o on o.object_id = m.object_id
                 join sys.schemas s on o.schema_id = s.schema_id
-            where 
+            where
                 o.type ='FN'
                 and m.object_id = :id""")
+
 
 @dataclass
 class OriginalSystemReferense(Original):
@@ -422,7 +429,7 @@ class OriginalSystemReferense(Original):
     referenced_id: int
 
     @classmethod
-    def get_referenses_for_object(cls, conn, obj_long_name):
+    def get_references_for_object(cls, conn, obj_long_name):
         """
         Возвращает коллекцию object_id объектов, от которых зависит объект, чьё
         значение long_name (Схема.Название) передано в качестве аргумента.
@@ -432,12 +439,23 @@ class OriginalSystemReferense(Original):
         query = text(
             """
             SELECT distinct referenced_id FROM
-            sys.dm_sql_referenced_entities(:obj_long_name,'OBJECT')""")
-        # dict comprehension
-        return {
-            obj.referenced_id: obj
-            for obj in [
-                cls(**record) 
-                for record in conn.execute(query, obj_long_name=obj_long_name)
-            ]
-        }
+            sys.dm_sql_referenced_entities(:obj_long_name,'OBJECT')
+            WHERE referenced_id is not NULL""")
+        try:
+            dataset = conn.execute(query, obj_long_name=obj_long_name)
+            # dict comprehension
+            return {
+                obj.referenced_id: obj
+                for obj in [
+                    cls(**record)
+                    for record in dataset
+                ]
+            }
+        except Exception as e:
+            # ToDo
+            # процедуры с битыми зависимостями, ошибка 2020
+            # https://docs.microsoft.com/ru-ru/sql/relational-databases/errors-events/mssqlserver-2020-database-engine-error?view=sql-server-2017
+            
+            print(e._message())
+            return {}
+        

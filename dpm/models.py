@@ -1,9 +1,7 @@
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
-from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, Boolean, SmallInteger, event
+from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, Boolean, SmallInteger
 from sqlalchemy.orm import deferred, relationship
 from sqlalchemy.orm.collections import attribute_mapped_collection
-
-import binascii
 import datetime
 
 BaseDPM = declarative_base()
@@ -13,7 +11,7 @@ class ModelException(Exception):
     pass
 
 
-class SystemEntity(BaseDPM):
+class SystemEntity:
     """
     Объект иформационной системы. Имеет оригинал, извлекаемый либо из
     исходников на Delphi, либо из боевой базы информационной системы.
@@ -44,7 +42,7 @@ class SystemEntity(BaseDPM):
         return []
 
 
-class Node(SystemEntity):
+class Node(BaseDPM, SystemEntity):
     """
     Компоненты исследуемой информационной системы, которые
     взаимодействуют друг с другом и соединяются связями.
@@ -59,10 +57,10 @@ class Node(SystemEntity):
     type = Column(String(50))
 
     __mapper_args__ = {
-        "polymorphic_on":"type",
-        "polymorphic_identity":"Объект"
+        "polymorphic_on": "type",
+        "polymorphic_identity": "Объект"
     }
-    
+
     def update_from(self, original):
         """
         Обновляет данные основных полей объекта данными из исходников.
@@ -84,7 +82,7 @@ class Node(SystemEntity):
 
     def get_formatted_revision_date(self):
         return self.last_revision.strftime("%d.%m.%Y %H:%M")
-    
+
     def get_formatted_update_date(self):
         return self.last_update.strftime("%d.%m.%Y %H:%M")
 
@@ -157,6 +155,7 @@ class SourceCodeFileMixin():
     """
     path = Column(String(1000), nullable=False)
 
+
 class DatabaseObject(Node):
     """
     Объект, хранящийся в базе данных информационной системы
@@ -169,22 +168,25 @@ class DatabaseObject(Node):
     написания его имени - короткое (Имя), длинное (Схема.Имя) и полное
     (База.Схема.Имя).
 
-    Каждый экземпляр этого класса умеет генерировать большое регулярное выражения
-    для поиска упоминаний этого объекта (процедуры, функции, таблицы и т.д.) в текстах
-    sql-запросов на клиенте или в БД. 
-    
-    Если, например, процедура из БД1 обращается к таблице из БД2, то допускается 
-    использовать только полное имя таблицы, поэтому регулярки для "родной" и 
-    для "чужой" базы отличаются. Запросы, направляемые с клиента (например из 
-    компонента TADOQuery) тоже работают в контексте определённой БД
-    (той, с которой соединяется подключённый к TADOQuery компонент TADOConnection),
-    поэтому данное правило распространяется и на них тоже.
+    Каждый экземпляр этого класса умеет генерировать большое регулярное
+    выражения для поиска упоминаний этого объекта (процедуры, функции,
+    таблицы и т.д.) в текстах sql-запросов на клиенте или в БД.
+
+    Если, например, процедура из БД1 обращается к таблице из БД2, то
+    допускается использовать только полное имя таблицы, поэтому
+    регулярки для "родной" и для "чужой" базы отличаются. Запросы,
+    направляемые с клиента (например из компонента TADOQuery) тоже работают
+    в контексте определённой БД (той, с которой соединяется подключённый
+    к TADOQuery компонент TADOConnection), поэтому данное правило
+    распространяется и на них тоже.
     """
     __tablename__ = "DatabaseObject"
     id = Column(ForeignKey("Node.id"), primary_key=True)
     database_id = Column(ForeignKey("Database.id"))
-    # имя базы данных добавлено для того, чтобы не провоцировать срабатывание 
-    # session.flush при запросе свойства full_name
+    """
+    имя базы данных добавлено для того, чтобы не провоцировать
+    срабатывание session.flush при запросе свойства full_name
+    """
     database_name = Column(String(120), nullable=False)
     database = relationship(
         "Database",
@@ -196,11 +198,11 @@ class DatabaseObject(Node):
     @property
     def long_name(self):
         return f"{self.schema}.{self.name}"
-    
+
     @property
     def full_name(self):
         return f"{self.database_name}.{self.schema}.{self.name}"
-    
+
     @property
     def sql_actions(self):
         """
@@ -208,16 +210,18 @@ class DatabaseObject(Node):
         при его использовании в sql-коде.
         """
         return []
-    
+
     def get_regexp_universal(self, actions, names):
         """
         Универсальный метод генерации регулярок для объектов БД.
 
-        actions - список действий, которые будем искать (select, exec, delete etc.)
-        names - список вариантов написания имени объекта (короткое, длинное, полное).
+        actions - список действий, которые будем искать
+        (select, exec, delete etc.)
+        names - список вариантов написания имени объекта
+        (короткое, длинное, полное).
 
         Одно и то же действие (вставка, выборка) может быть
-        оформлено синтаксически по-разному, итоговое регулярное 
+        оформлено синтаксически по-разному, итоговое регулярное
         выражение формируется как комбинация всех этих вариантов.
 
         Результат имеет примерно такой вид:
@@ -244,20 +248,21 @@ class DatabaseObject(Node):
                     chunks.append(fr"truncate {name} ")
                 elif action == "drop":
                     chunks.append(fr"drop table {name} ")
-                if name != names[len(names)-1]:
+                if name != names[len(names) - 1]:
                     chunks.append(r"|")
-            if action != actions[len(actions)-1]:
+            if action != actions[len(actions) - 1]:
                 chunks.append(r")|")
             else:
                 chunks.append(r")")
         return "".join(chunks)
-    
+
     def get_regexp_for_home_db(self):
         """
         Получение регулярки для поиска в скриптах "родной" БД.
 
-        В этом случае используются все три варианта написания имени объекта: короткое,
-        длинное и полное (Название, Схема.Название, БД.Схема.Название)
+        В этом случае используются все три варианта написания
+        имени объекта: короткое, длинное и полное
+        (Название, Схема.Название, БД.Схема.Название)
         """
         names = [
             self.name,
@@ -265,12 +270,13 @@ class DatabaseObject(Node):
             self.full_name
         ]
         return self.get_regexp_universal(self.sql_actions, names)
-    
+
     def get_regexp_for_external_db(self):
         """
         Получение регулярки для поиска в скриптах "чужой" БД.
 
-        В этом случае используются только полное имя объекта - БД.Схема.Название
+        В этом случае используются только полное имя объекта -
+        БД.Схема.Название
         """
         return self.get_regexp_universal(self.sql_actions, [self.full_name])
 
@@ -284,7 +290,7 @@ class SQLQueryMixin():
     обновлений и, как следствие, пересчёта зависимостей.
     """
     crc32 = Column(Integer)
-    
+
     @declared_attr
     def sql(cls):
         return deferred(Column(Text, nullable=False))
@@ -315,7 +321,7 @@ class ClientQuery(Node, SQLQueryMixin):
         back_populates="components")
 
     __mapper_args__ = {
-        "polymorphic_identity":"Клиентский запрос"
+        "polymorphic_identity": "Клиентский запрос"
     }
 
     @property
@@ -329,8 +335,8 @@ class ClientQuery(Node, SQLQueryMixin):
         Исходные данные берутся из оригинального компонента с диска,
         к модели присоединяются ссылки на форму и на соединение с БД.
 
-        Дата обновления ставится немножко костыльно, так как узнать реальную дату
-        обновления компонента невозможно.
+        Дата обновления ставится немножко костыльно, так как
+        узнать реальную дату обновления компонента невозможно.
         """
         for param in ["parent", "connections"]:
             if param not in refs:
@@ -350,6 +356,7 @@ class ClientQuery(Node, SQLQueryMixin):
 
     def __repr__(self):
         return f"{self.name}: {self.component_type} "
+
 
 class Form(Node, SourceCodeFileMixin):
     """
@@ -379,7 +386,7 @@ class Form(Node, SourceCodeFileMixin):
     parsing_error_message = Column(String(300))
 
     __mapper_args__ = {
-        "polymorphic_identity":"Форма"
+        "polymorphic_identity": "Форма"
     }
 
     @property
@@ -406,6 +413,7 @@ class Form(Node, SourceCodeFileMixin):
 
     def __repr__(self):
         return self.name
+
 
 class ClientConnection(Node):
     """
@@ -438,7 +446,7 @@ class ClientConnection(Node):
     is_verified = Column(Boolean, default=False, nullable=False)
 
     __mapper_args__ = {
-        "polymorphic_identity":"Компонент-соединение"
+        "polymorphic_identity": "Компонент-соединение"
     }
 
     @property
@@ -485,7 +493,7 @@ class Application(Node, SourceCodeFileMixin):
         passive_deletes=True)
 
     __mapper_args__ = {
-        "polymorphic_identity":"АРМ"
+        "polymorphic_identity": "АРМ"
     }
 
     @property
@@ -516,7 +524,7 @@ class DBScript(DatabaseObject, SQLQueryMixin):
     id = Column(Integer, ForeignKey("DatabaseObject.id"), primary_key=True)
     database = relationship(
         "Database",
-        back_populates="executables",
+        back_populates="scripts",
         foreign_keys=[DatabaseObject.database_id])
     references = relationship(
         "SystemReference",
@@ -526,12 +534,12 @@ class DBScript(DatabaseObject, SQLQueryMixin):
         passive_deletes=True)
 
     __mapper_args__ = {
-        "polymorphic_identity":"Запрос в БД"
+        "polymorphic_identity": "Запрос в БД"
     }
 
     def __repr__(self):
         return f"{self.full_name} : Запрос"
-    
+
     @classmethod
     def create_from(cls, original, **refs):
         """
@@ -551,11 +559,11 @@ class DBScript(DatabaseObject, SQLQueryMixin):
             database_object_id=original.database_object_id,
             database=refs["parent"]
         )
-    
+
     @property
     def sync_fields(self):
         return ["sql", "crc32"]
-    
+
     @property
     def sql_actions(self):
         """
@@ -565,7 +573,7 @@ class DBScript(DatabaseObject, SQLQueryMixin):
         return ["select", "exec"]
 
 
-class SystemReference(SystemEntity):
+class SystemReference(BaseDPM, SystemEntity):
     """
     Зависимость между объектами БД, подтянутая из системных таблиц
     SQL Server.
@@ -594,7 +602,7 @@ class SystemReference(SystemEntity):
     def update_from(self, original):
         super().update_from(original)
         self.is_checked = False
-    
+
     @classmethod
     def create_from(cls, original, **refs):
         if "parent" not in refs:
@@ -612,7 +620,7 @@ class DBView(DBScript):
     __tablename__ = "DBView"
     id = Column(ForeignKey("DBScript.id"), primary_key=True)
     __mapper_args__ = {
-        "polymorphic_identity":"Представление"
+        "polymorphic_identity": "Представление"
     }
 
     def __repr__(self):
@@ -626,7 +634,7 @@ class DBScalarFunction(DBScript):
     __tablename__ = "DBScalarFunction"
     id = Column(ForeignKey("DBScript.id"), primary_key=True)
     __mapper_args__ = {
-        "polymorphic_identity":"Скалярная функция"
+        "polymorphic_identity": "Скалярная функция"
     }
 
     def __repr__(self):
@@ -640,7 +648,7 @@ class DBTableFunction(DBScript):
     __tablename__ = "DBTableFunction"
     id = Column(ForeignKey("DBScript.id"), primary_key=True)
     __mapper_args__ = {
-        "polymorphic_identity":"Табличная функция"
+        "polymorphic_identity": "Табличная функция"
     }
 
     def __repr__(self):
@@ -654,7 +662,7 @@ class DBStoredProcedure(DBScript):
     __tablename__ = "DBStoredProcedure"
     id = Column(ForeignKey("DBScript.id"), primary_key=True)
     __mapper_args__ = {
-        "polymorphic_identity":"Хранимая процедура"
+        "polymorphic_identity": "Хранимая процедура"
     }
 
     def __repr__(self):
@@ -677,12 +685,12 @@ class DBTrigger(DBScript):
     is_insert = Column(Boolean, nullable=False)
 
     __mapper_args__ = {
-        "polymorphic_identity":"Триггер"
+        "polymorphic_identity": "Триггер"
     }
 
     def __repr__(self):
         return f"{self.full_name} : Триггер"
-    
+
     @classmethod
     def create_from(cls, original, **refs):
         for param in ["table", "database"]:
@@ -702,6 +710,7 @@ class DBTrigger(DBScript):
             database=refs["database"]
         )
 
+
 class DBTable(DatabaseObject):
     """
     Таблица из базы данных исследуемой системы.
@@ -719,12 +728,12 @@ class DBTable(DatabaseObject):
         passive_deletes=True)
 
     __mapper_args__ = {
-        "polymorphic_identity":"Таблица"
+        "polymorphic_identity": "Таблица"
     }
 
     def __repr__(self):
         return f"{self.full_name} : Таблица"
-    
+
     @classmethod
     def create_from(cls, original, **refs):
         if "parent" not in refs:
@@ -737,7 +746,7 @@ class DBTable(DatabaseObject):
             last_update=original.last_update,
             database=refs["parent"]
         )
-    
+
     @property
     def sql_actions(self):
         """
@@ -809,9 +818,8 @@ class Database(Node):
         foreign_keys=[ClientConnection.database_id])
 
     __mapper_args__ = {
-        "polymorphic_identity":"База данных"
+        "polymorphic_identity": "База данных"
     }
 
     def __repr__(self):
         return self.name
- 
