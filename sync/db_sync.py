@@ -15,52 +15,60 @@ from .common_functions import (
     get_remaining_objects)
 from typing import List, Dict
 import itertools
+import logging
 
 
 def sync_database(base, session, conn):
     """
     Синхронизирует одну базу данных целиком.
     """
-    # достаём оригинал базы данных
+    logging.debug(f"Достаём оригинал базы данных {base.name}")
     original_db = original_models.OriginalDatabase.fetch_from_metadata(conn)
-    # если в оригинале не было изменений, выходим
     if original_db.last_update == base.last_update:
+        logging.info(f"В оригинальной БД не было изменений, выходим")
         return
-    # вытаскиваем всю хранимую информацию по базе без ленивой загрузки
+    logging.debug(f"Вытаскиваем всю хранимую информацию по БД {base.name} без ленивой загрузки")
     base = session.query(Database).options(
         selectinload(Database.scripts).selectinload(DBScript.references),
         selectinload(Database.tables)
     ).filter(Database.id == base.id).one()
-    # синхронизируем по очереди все типы объектов
-    # процедуры
+    logging.debug(f"Синхронизируем по очереди все типы объектов БД {base.name}")
+    logging.debug(f"Синхронизируем процедуры БД {base.name}")
     proc_data_set = original_models.OriginalProcedure.get_all(conn)
     sync_subordinate_members(proc_data_set, base.procedures, session, parent=base)
-    # представления
+    logging.debug(f"Синхронизируем представления БД {base.name}")
     views_data_set = original_models.OriginalView.get_all(conn)
     sync_subordinate_members(views_data_set, base.views, session, parent=base)
-    # табличные функции
+    logging.debug(f"Синхронизируем табличные функции БД {base.name}")
     tabfunc_data_set = original_models.OriginalTableFunction.get_all(conn)
     sync_subordinate_members(tabfunc_data_set, base.table_functions, session, parent=base)
-    # скалярные функции
+    logging.debug(f"Синхронизируем скалярные функции БД {base.name}")
     sfunc_data_set = original_models.OriginalScalarFunction.get_all(conn)
     sync_subordinate_members(sfunc_data_set, base.scalar_functions, session, parent=base)
-    # таблицы
+    logging.debug(f"Синхронизируем таблицы БД {base.name}")
     tables_data_set = original_models.OriginalTable.get_all(conn)
     sync_subordinate_members(tables_data_set, base.tables, session, parent=base)
-    # сопоставляем триггеры для оставшихся таблиц
+    logging.debug(f"Сопоставляем триггеры для оставшихся таблиц БД {base.name}")
     for table_name in base.tables:
+        logging.debug(f"Собираем триггеры для таблицы {table_name} в БД {base.name}")
         table = base.tables[table_name]
         triggers_data_set = original_models.OriginalTrigger.get_triggers_for_table(
             conn, table.database_object_id)
         sync_subordinate_members(triggers_data_set, table.triggers, session, table=table, database=base)
-    # синхронизируем системные зависимости скриптов
+    logging.debug(f"Синхронизируем системные зависимости скриптов в БД {base.name}")    
     for script_name in base.scripts:
+        logging.debug(f"Обрабатываем зависимости скрипта {script_name}")
         script = base.scripts[script_name]
-        ref_data_set = original_models.\
-            OriginalSystemReferense.get_references_for_object(conn, script.long_name)
-        sync_subordinate_members(ref_data_set, script.references, session, parent=script)
-    # обновляем данные самой базы
+        try:
+            ref_data_set = original_models.\
+                OriginalSystemReferense.get_references_for_object(conn, script.long_name)
+            sync_subordinate_members(ref_data_set, script.references, session, parent=script)
+        except Exception as e:
+            logging.error(f"Не удалось запросить у SQL Server зависимости {script_name}, ошибка - \n{e}")
+            script.is_broken = True
+    # обновляем метаданные самой базы
     base.update_from(original_db)
+    logging.info(f"Обработка базы {base.name} завершена")
 
 
 def sync_separate_script(script, session, conn):

@@ -526,6 +526,8 @@ class DBScript(DatabaseObject, SQLQueryMixin):
         "Database",
         back_populates="scripts",
         foreign_keys=[DatabaseObject.database_id])
+    # ставится в True, если не удалось прочитать системные зависимости скрипта
+    is_broken = Column(Boolean, default=False, nullable=False)
     references = relationship(
         "SystemReference",
         collection_class=attribute_mapped_collection("referenced_id"),

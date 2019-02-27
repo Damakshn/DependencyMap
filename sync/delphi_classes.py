@@ -5,7 +5,7 @@ from dfm import DFMLoader, DFMException
 import binascii
 from .common_classes import Original
 from .mixins import SQLProcessorMixin
-
+import logging
 
 class DelphiToolsException(Exception):
     pass
@@ -14,13 +14,16 @@ class DelphiToolsException(Exception):
 class DelphiProject(Original):
 
     def __init__(self, path_to_dproj):
+        logging.info(f"Обрабатываем оригинал проекта {path_to_dproj}")
         self.forms = {}
         self.last_update = None
         # абсолютный путь к файлу проекта
         self.path = path_to_dproj
         # проверить доступность файла
         if not os.path.exists(self.path):
-            raise DelphiToolsException(f"Не найден файл с проектом {self.path}.")
+            msg = f"Не найден файл с проектом {self.path}"
+            logging.error(msg)
+            raise DelphiToolsException(msg)
         # достаём путь к папке с проектом
         self.projdir = os.path.dirname(self.path)
         # запомнить дату обновления файла проекта
@@ -28,43 +31,59 @@ class DelphiProject(Original):
         # читаем файл проекта (xml)
         namespace = ""
         try:
+            logging.debug(f"Парсим файл проекта {path_to_dproj}")
             root = ET.parse(self.path).getroot()
             if root.tag.startswith("{"):
                 namespace = root.tag[:root.tag.find("}")+1]
             items = root.find(f"{namespace}ItemGroup")
+            logging.debug(f"Достаём формы проекта")
+            no_errors = True
             for item in items.findall(f"{namespace}DCCReference"):
-                # имя модуля достаётся вот так, пока не востребовано
+                # имя модуля достаётся вот так; пока не востребовано
                 module_name = item.attrib["Include"]
                 # обрабатываем файл формы, если он указан
                 if len(item) > 0:
                     form_name = module_name[:module_name.find(".")]
-                    # формируем путь к файлу
+                    logging.debug(f"Обрабатываем файл формы {form_name}")
                     form_path = os.path.join(self.projdir, f"{form_name}.dfm")
+                    logging.debug(f"Путь к файлу формы {form_path}")
                     # проверяем доступность файла
                     # ToDo - починить пути к общим файлам форм в армах
                     if not os.path.exists(form_path):
-                        raise DelphiToolsException(f"Файл с описанием формы {form_path} не найден.")
+                        no_errors = False
+                        msg = f"Файл с описанием формы {form_path} не найден."
+                        logging.error(msg)
+                        #raise DelphiToolsException(msg)
+                        continue
                     form_update = datetime.datetime.fromtimestamp(os.path.getmtime(form_path))
                     # по максимальной среди форм дате обновления получаем дату обновления арма
                     if form_update > self.last_update:
                         self.last_update = form_update
                     self.forms[form_path] = {"name": form_name, "path" :form_path, "last_update": form_update}
+                    if no_errors:
+                        logging.info(f"Обработка проекта {self.path} завершена, все файлы прочитаны")
+                    else:
+                        logging.info(f"Обработка проекта {self.path} завершена с ошибками")
         except ET.ParseError:
-            raise DelphiToolsException(f"Не удалось распарсить файл проекта {self.path}")
+            msg = f"Не удалось распарсить файл проекта {self.path}"
+            logging.error(msg)
+            raise DelphiToolsException(msg)
 
 
 class DelphiForm(Original):
 
     def __init__(self, path):
+        logging.info(f"Обрабатываем оригинал формы {path}")
         self.path = path
         self.name = os.path.split(self.path)[1]
-        # имя формы .дфм
         self.alias = None
         self.data = None
         if not os.path.exists(self.path):
-            raise Exception(f"Файл формы {self.path} не найден.")
+            msg = f"Файл формы {self.path} не найден"
+            logging.error(msg)
+            raise Exception(msg)
         self.last_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path))
-        # парсим форму
+        logging.debug(f"Парсим форму {self.name}")
         self.is_broken = False
         self.parsing_error_message = None
         self.components = []
@@ -75,13 +94,16 @@ class DelphiForm(Original):
             self.alias = self.data["name"]
             file.close()
         except DFMException as e:
+                logging.error(f"Не удалось распарсить форму {self.name}, компоненты не читаются, ошибка - {e}")
                 self.is_broken = True
                 self.parsing_error_message = str(e)
-        # формируем список компонентов, если форма распарсилась нормально
         if not self.is_broken:
+            logging.debug(f"Формируем список компонентов формы {self.name}")
             for key in self.data:
                 if DBComponent.is_db_component(self.data[key]):
-                    self.components.append(DBComponent.create(self.data[key], self.alias))
+                    new_component = DBComponent.create(self.data[key], self.alias)
+                    self.components.append(new_component)
+                    logging.debug(f"Прочитан компонент {new_component}")
 
     @property
     def connections(self):

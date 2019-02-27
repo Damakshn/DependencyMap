@@ -35,7 +35,7 @@ class OriginalDatabaseObject(DBOriginal):
         self.full_name = f"{self.db_name}.{self.schema}.{self.name}"
 
     @classmethod
-    def query_all(cls):
+    def query_for_all(cls):
         return None
 
     @classmethod
@@ -51,7 +51,7 @@ class OriginalDatabaseObject(DBOriginal):
         Тип коллекции - словарь, ключ - поле full_name,
         т.е. База.Схема.Название.
         """
-        query = cls.query_all()
+        query = cls.query_for_all()
         # dict comprehension
         return {
             obj.full_name: obj
@@ -119,7 +119,7 @@ class OriginalTable(OriginalDatabaseObject):
     """
 
     @classmethod
-    def query_all(cls):
+    def query_for_all(cls):
         return text(
             """
             select
@@ -163,7 +163,7 @@ class OriginalTrigger(OriginalScript):
     is_insert: bool
 
     @classmethod
-    def query_all(cls):
+    def query_for_all(cls):
         return text(
             """
             select
@@ -252,7 +252,7 @@ class OriginalProcedure(OriginalScript):
     """
 
     @classmethod
-    def query_all(cls):
+    def query_for_all(cls):
         return text(
             """
             select
@@ -296,7 +296,7 @@ class OriginalView(OriginalScript):
     """
 
     @classmethod
-    def query_all(cls):
+    def query_for_all(cls):
         return text(
             """
             select
@@ -340,7 +340,7 @@ class OriginalTableFunction(OriginalScript):
     """
 
     @classmethod
-    def query_all(cls):
+    def query_for_all(cls):
         return text(
             """
             select
@@ -384,7 +384,7 @@ class OriginalScalarFunction(OriginalScript):
     """
 
     @classmethod
-    def query_all(cls):
+    def query_for_all(cls):
         return text(
             """
             select
@@ -441,21 +441,15 @@ class OriginalSystemReferense(Original):
             SELECT distinct referenced_id FROM
             sys.dm_sql_referenced_entities(:obj_long_name,'OBJECT')
             WHERE referenced_id is not NULL""")
-        try:
-            dataset = conn.execute(query, obj_long_name=obj_long_name)
-            # dict comprehension
-            return {
-                obj.referenced_id: obj
-                for obj in [
-                    cls(**record)
-                    for record in dataset
-                ]
-            }
-        except Exception as e:
-            # ToDo
-            # процедуры с битыми зависимостями, ошибка 2020
-            # https://docs.microsoft.com/ru-ru/sql/relational-databases/errors-events/mssqlserver-2020-database-engine-error?view=sql-server-2017
-            
-            print(e._message())
-            return {}
-        
+        dataset = conn.execute(query, obj_long_name=obj_long_name)
+        # ToDo
+        # процедуры с битыми зависимостями, ошибка 2020
+        # https://docs.microsoft.com/ru-ru/sql/relational-databases/errors-events/mssqlserver-2020-database-engine-error?view=sql-server-2017
+        # dict comprehension
+        return {
+            obj.referenced_id: obj
+            for obj in [
+                cls(**record)
+                for record in dataset
+            ]
+        }
