@@ -11,38 +11,7 @@ class ModelException(Exception):
     pass
 
 
-class SystemEntity:
-    """
-    Объект иформационной системы. Имеет оригинал, извлекаемый либо из
-    исходников на Delphi, либо из боевой базы информационной системы.
-    """
-
-    def update_from(self, original):
-        """
-        Обновляет данные основных полей объекта данными из исходников.
-        """
-        # проверяем наличие всех синхронизируемых полей в оригинале
-        for field in self.sync_fields:
-            if not hasattr(original, field):
-                raise ModelException(f"Поле {field} не найдено в оригинале объекта {self.__class__}")
-        for field in self.sync_fields:
-            setattr(self, field, getattr(original, field))
-
-    @classmethod
-    def create_from(cls, original, **refs):
-        """
-        Создаёт экземпляр объекта из оригинала.
-
-        refs - ссылочные параметры, в классах потомках расписаны подробно.
-        """
-        raise NotImplementedError(f"Метод create_from не реализован для класса {cls}")
-
-    @property
-    def sync_fields(self):
-        return []
-
-
-class Node(BaseDPM, SystemEntity):
+class Node(BaseDPM):
     """
     Компоненты исследуемой информационной системы, которые
     взаимодействуют друг с другом и соединяются связями.
@@ -55,6 +24,8 @@ class Node(BaseDPM, SystemEntity):
     # когда последний раз сверялись с оригиналом
     last_update = Column(DateTime)
     type = Column(String(50))
+    id_broken = Column(Boolean, default=False, nullable=False)
+    is_dummy = Column(Boolean, default=False, nullable=False)
 
     __mapper_args__ = {
         "polymorphic_on": "type",
@@ -63,9 +34,14 @@ class Node(BaseDPM, SystemEntity):
 
     def update_from(self, original):
         """
-        Обновляет данные основных полей объекта данными из исходников.
+        Обновляет данные основных полей объекта данными из оригинала.
         """
-        super().update_from(original)
+        # проверяем наличие всех синхронизируемых полей в оригинале
+        for field in self.sync_fields:
+            if not hasattr(original, field):
+                raise ModelException(f"Поле {field} не найдено в оригинале объекта {self.__class__}")
+        for field in self.sync_fields:
+            setattr(self, field, getattr(original, field))
         self.last_update = getattr(original, "last_update", datetime.datetime.now())
 
     @property
@@ -87,11 +63,11 @@ class Node(BaseDPM, SystemEntity):
         return self.last_update.strftime("%d.%m.%Y %H:%M")
 
 
-class Link(BaseDPM):
+class Edge(BaseDPM):
     """
     Связи между объектами Node.
     """
-    __tablename__ = "Link"
+    __tablename__ = "Edge"
     id = Column(Integer, primary_key=True)
     # какие сущности соединены
     from_node_id = Column(Integer, ForeignKey("Node.id"), nullable=False)
@@ -109,16 +85,20 @@ class Link(BaseDPM):
     # сломанная связь не будет стёрта при обновлении и не будет отображаться
     # и не будет использоваться при поиске зависимостей
     is_broken = Column(Boolean, default=False, nullable=False)
+    # если True, то один из соединяемых объектов является фиктивным
+    is_dummy = Column(Boolean, default=False, nullable=False)
     # поля, описывающие что объект from_node делает с объектом to_node
     # числовое значение указывает на число совпадений (кол-во использований)
-    contain = Column(Boolean, default=False)
-    call = Column(SmallInteger, default=0)
-    select = Column(SmallInteger, default=0)
-    insert = Column(SmallInteger, default=0)
-    update = Column(SmallInteger, default=0)
-    delete = Column(SmallInteger, default=0)
-    truncate = Column(SmallInteger, default=0)
-    drop = Column(SmallInteger, default=0)
+    contain = Column(Boolean, default=False, nullable=False)
+    call = Column(SmallInteger, default=0, nullable=False)
+    select = Column(SmallInteger, default=0, nullable=False)
+    insert = Column(SmallInteger, default=0, nullable=False)
+    update = Column(SmallInteger, default=0, nullable=False)
+    delete = Column(SmallInteger, default=0, nullable=False)
+    truncate = Column(Boolean, default=False, nullable=False)
+    drop = Column(Boolean, default=False, nullable=False)
+    trigger = Column(Boolean, default=False, nullable=False)
+    
 
     def __repr__(self):
         if isinstance(self.from_node, DBScript):
@@ -133,27 +113,20 @@ class Link(BaseDPM):
         return f"{from_node_name} -> {to_node_name}"
 
 """
-добавляем классу Node зависимости от Link
+добавляем классу Node зависимости от Edge
 входящие и исходящие связи;
 при удалении ноды все входящие/исходящие связи тоже должны быть удалены
 """
-Node.links_in = relationship(
-    "Link",
-    foreign_keys=[Link.to_node_id],
+Node.edges_in = relationship(
+    "Edge",
+    foreign_keys=[Edge.to_node_id],
     cascade="all, delete",
     passive_deletes=True)
-Node.links_out = relationship(
-    "Link",
-    foreign_keys=[Link.from_node_id],
+Node.edges_out = relationship(
+    "Edge",
+    foreign_keys=[Edge.from_node_id],
     cascade="all, delete",
     passive_deletes=True)
-
-
-class SourceCodeFileMixin():
-    """
-    Файл с исходниками программы, хранящийся на диске.
-    """
-    path = Column(String(1000), nullable=False)
 
 
 class DatabaseObject(Node):
@@ -182,18 +155,10 @@ class DatabaseObject(Node):
     """
     __tablename__ = "DatabaseObject"
     id = Column(ForeignKey("Node.id"), primary_key=True)
-    database_id = Column(ForeignKey("Database.id"))
-    """
-    имя базы данных добавлено для того, чтобы не провоцировать
-    срабатывание session.flush при запросе свойства full_name
-    """
-    database_name = Column(String(120), nullable=False)
-    database = relationship(
-        "Database",
-        foreign_keys=[database_id])
-    # id объекта в оригинальной базе (для точечного обновления)
+    database_id = Column(Integer, nullable=False)
     database_object_id = Column(Integer, nullable=False)
     schema = Column(String(30), nullable=False)
+    database_name = Column(String(120), nullable=False)
 
     @property
     def long_name(self):
@@ -311,14 +276,7 @@ class ClientQuery(Node, SQLQueryMixin):
     """
     __tablename__ = "ClientQuery"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
-    form_id = Column(ForeignKey("Form.id"), nullable=False)
-    form = relationship("Form", foreign_keys=[form_id])
     component_type = Column(String(120), nullable=False)
-    connection_id = Column(ForeignKey("ClientConnection.id"))
-    connection = relationship(
-        "ClientConnection",
-        foreign_keys=[connection_id],
-        back_populates="components")
 
     __mapper_args__ = {
         "polymorphic_identity": "Клиентский запрос"
@@ -358,7 +316,7 @@ class ClientQuery(Node, SQLQueryMixin):
         return f"{self.name}: {self.component_type} "
 
 
-class Form(Node, SourceCodeFileMixin):
+class Form(Node):
     """
     Delphi-форма с компонентами.
 
@@ -368,21 +326,8 @@ class Form(Node, SourceCodeFileMixin):
     """
     __tablename__ = "Form"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
+    path = Column(String(1000), nullable=False)
     alias = Column(String(50))
-    application_id = Column(ForeignKey("Application.id"), nullable=False)
-    application = relationship(
-        "Application",
-        foreign_keys=[application_id],
-        back_populates="forms")
-    components = relationship(
-        "ClientQuery",
-        collection_class=attribute_mapped_collection("name"),
-        back_populates="form",
-        foreign_keys=[ClientQuery.form_id],
-        cascade='all, delete',
-        passive_deletes=True)
-    # на случай, если форму не удалось распарсить
-    is_broken = Column(Boolean, default=False, nullable=False)
     parsing_error_message = Column(String(300))
 
     __mapper_args__ = {
@@ -423,24 +368,8 @@ class ClientConnection(Node):
     """
     __tablename__ = "ClientConnection"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
-    application_id = Column(ForeignKey("Application.id"), nullable=False)
-    application = relationship(
-        "Application",
-        foreign_keys=[application_id],
-        back_populates="connections")
     # заполняется при создании из компонента
     database_name = Column(String(50))
-    # ссылка на конкретную базу устанавливается в ходе верификации
-    database_id = Column(ForeignKey("Database.id"))
-    database = relationship(
-        "Database",
-        back_populates="connections",
-        foreign_keys=[database_id])
-    components = relationship(
-        "ClientQuery",
-        collection_class=attribute_mapped_collection("name"),
-        back_populates="connection",
-        foreign_keys=[ClientQuery.connection_id])
     # если is_verified True, то данные соединения проверены вручную
     # и связи подключённых к нему компонентов можно анализировать
     is_verified = Column(Boolean, default=False, nullable=False)
@@ -471,26 +400,13 @@ class ClientConnection(Node):
         return f"Соединение {self.name} ({'???' if self.database is None else self.database.name})"
 
 
-class Application(Node, SourceCodeFileMixin):
+class Application(Node):
     """
     Клиентское приложение, написанное на Delphi.
     """
     __tablename__ = "Application"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
-    forms = relationship(
-        "Form",
-        collection_class=attribute_mapped_collection("path"),
-        back_populates="application",
-        foreign_keys=[Form.application_id],
-        cascade="all, delete",
-        passive_deletes=True)
-    connections = relationship(
-        "ClientConnection",
-        collection_class=attribute_mapped_collection("name"),
-        back_populates="application",
-        foreign_keys=[ClientConnection.application_id],
-        cascade="all, delete",
-        passive_deletes=True)
+    path = Column(String(1000), nullable=False)
 
     __mapper_args__ = {
         "polymorphic_identity": "АРМ"
@@ -522,18 +438,6 @@ class DBScript(DatabaseObject, SQLQueryMixin):
     """
     __tablename__ = "DBScript"
     id = Column(Integer, ForeignKey("DatabaseObject.id"), primary_key=True)
-    database = relationship(
-        "Database",
-        back_populates="scripts",
-        foreign_keys=[DatabaseObject.database_id])
-    # ставится в True, если не удалось прочитать системные зависимости скрипта
-    is_broken = Column(Boolean, default=False, nullable=False)
-    references = relationship(
-        "SystemReference",
-        collection_class=attribute_mapped_collection("referenced_id"),
-        back_populates="script",
-        cascade="all, delete",
-        passive_deletes=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "Запрос в БД"
@@ -573,46 +477,6 @@ class DBScript(DatabaseObject, SQLQueryMixin):
         при его использовании в sql-коде.
         """
         return ["select", "exec"]
-
-
-class SystemReference(BaseDPM, SystemEntity):
-    """
-    Зависимость между объектами БД, подтянутая из системных таблиц
-    SQL Server.
-
-    Не является нодой, не участвует в построении связей напрямую.
-
-    SQL Server для каждого скрипта хранит информацию о том, какие именно
-    объекты БД он использует, но не конкретизирует, что именно скрипт с ними
-    делает.
-
-    Информация об объектах, от которых зависит скрипт позволяет сузить круг
-    таблиц и/или других скриптов, упоминания которых нужно будет найти в тексте
-    запроса при помощи регулярных выражений и конкретизировать.
-    """
-    __tablename__ = "SystemReference"
-    id = Column(Integer, primary_key=True)
-    script_id = Column(Integer, ForeignKey("DBScript.id"), nullable=False)
-    script = relationship(
-        "DBScript",
-        back_populates="references")
-    # id объекта, от которого зависит скрипт
-    referenced_id = Column(Integer, nullable=False)
-    # ставится в True после проверки скрипта алгоритмом анализа связей
-    is_checked = Column(Boolean, nullable=False, default=False)
-
-    def update_from(self, original):
-        super().update_from(original)
-        self.is_checked = False
-
-    @classmethod
-    def create_from(cls, original, **refs):
-        if "parent" not in refs:
-            raise ModelException("Пропущен именованный параметр parent")
-        return SystemReference(
-            referenced_id=original.referenced_id,
-            script=refs["parent"],
-            is_checked=False)
 
 
 class DBView(DBScript):
@@ -677,11 +541,6 @@ class DBTrigger(DBScript):
     """
     __tablename__ = "DBTrigger"
     id = Column(ForeignKey("DBScript.id"), primary_key=True)
-    table_id = Column(ForeignKey("DBTable.id"), nullable=False)
-    table = relationship(
-        "DBTable",
-        back_populates="triggers",
-        foreign_keys=[table_id])
     is_update = Column(Boolean, nullable=False)
     is_delete = Column(Boolean, nullable=False)
     is_insert = Column(Boolean, nullable=False)
@@ -719,15 +578,6 @@ class DBTable(DatabaseObject):
     """
     __tablename__ = "DBTable"
     id = Column(Integer, ForeignKey("DatabaseObject.id"), primary_key=True)
-    database = relationship(
-        "Database", back_populates="tables",
-        foreign_keys=[DatabaseObject.database_id])
-    triggers = relationship(
-        "DBTrigger",
-        collection_class=attribute_mapped_collection("full_name"),
-        back_populates="table", foreign_keys=[DBTrigger.table_id],
-        cascade="all, delete",
-        passive_deletes=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "Таблица"
@@ -764,60 +614,6 @@ class Database(Node):
     """
     __tablename__ = "Database"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
-    tables = relationship(
-        "DBTable",
-        collection_class=attribute_mapped_collection("full_name"),
-        back_populates="database",
-        foreign_keys=[DBTable.database_id],
-        cascade="all, delete",
-        passive_deletes=True)
-    views = relationship(
-        "DBView",
-        collection_class=attribute_mapped_collection("full_name"),
-        back_populates="database",
-        foreign_keys=[DBView.database_id],
-        cascade="all, delete",
-        passive_deletes=True)
-    procedures = relationship(
-        "DBStoredProcedure",
-        collection_class=attribute_mapped_collection("full_name"),
-        back_populates="database",
-        foreign_keys=[DBStoredProcedure.database_id],
-        cascade="all, delete",
-        passive_deletes=True)
-    table_functions = relationship(
-        "DBTableFunction",
-        collection_class=attribute_mapped_collection("full_name"),
-        back_populates="database",
-        foreign_keys=[DBTableFunction.database_id],
-        cascade="all, delete",
-        passive_deletes=True)
-    scalar_functions = relationship(
-        "DBScalarFunction",
-        collection_class=attribute_mapped_collection("full_name"),
-        back_populates="database",
-        foreign_keys=[DBScalarFunction.database_id],
-        cascade="all, delete",
-        passive_deletes=True)
-    triggers = relationship(
-        "DBTrigger",
-        collection_class=attribute_mapped_collection("full_name"),
-        back_populates="database",
-        foreign_keys=[DBTrigger.database_id],
-        cascade="all, delete",
-        passive_deletes=True)
-    scripts = relationship(
-        "DBScript",
-        collection_class=attribute_mapped_collection("full_name"),
-        back_populates="database",
-        foreign_keys=[DBScript.database_id],
-        cascade="all, delete",
-        passive_deletes=True)
-    connections = relationship(
-        "ClientConnection",
-        collection_class=attribute_mapped_collection("name"),
-        back_populates="database",
-        foreign_keys=[ClientConnection.database_id])
 
     __mapper_args__ = {
         "polymorphic_identity": "База данных"

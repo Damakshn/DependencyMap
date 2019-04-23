@@ -55,7 +55,7 @@ def sync_database(base, session, conn):
         triggers_data_set = original_models.OriginalTrigger.get_triggers_for_table(
             conn, table.database_object_id)
         sync_subordinate_members(triggers_data_set, table.triggers, session, table=table, database=base)
-    logging.debug(f"Синхронизируем системные зависимости скриптов в БД {base.name}")    
+    logging.debug(f"Синхронизируем системные зависимости скриптов в БД {base.name}")
     for script_name in base.scripts:
         logging.debug(f"Обрабатываем зависимости скрипта {script_name}")
         script = base.scripts[script_name]

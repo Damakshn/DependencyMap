@@ -33,7 +33,7 @@ def get_remaining_objects(session, cls) -> List[Node]:
     return result
 
 
-def sync_subordinate_members(originals: Dict, entities: Dict, session, **refs):
+def sync_subordinate_members(originals: Dict, entities: Dict, session, edges: List):
     """
     Самый главный метод всей синхронизации.
 
