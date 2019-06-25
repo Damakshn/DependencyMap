@@ -2,6 +2,7 @@ from sqlalchemy.ext.declarative import declarative_base, declared_attr
 from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, Boolean, SmallInteger
 from sqlalchemy.orm import deferred, relationship
 from sqlalchemy.orm.collections import attribute_mapped_collection
+from sqlalchemy.schema import Table
 import datetime
 
 BaseDPM = declarative_base()
@@ -90,6 +91,7 @@ class Edge(BaseDPM):
     # поля, описывающие что объект from_node делает с объектом to_node
     # числовое значение указывает на число совпадений (кол-во использований)
     contain = Column(Boolean, default=False, nullable=False)
+    connect = Column(Boolean, default=False, nullable=False)
     call = Column(SmallInteger, default=0, nullable=False)
     select = Column(SmallInteger, default=0, nullable=False)
     insert = Column(SmallInteger, default=0, nullable=False)
@@ -155,10 +157,10 @@ class DatabaseObject(Node):
     """
     __tablename__ = "DatabaseObject"
     id = Column(ForeignKey("Node.id"), primary_key=True)
-    database_id = Column(Integer, nullable=False)
+    database_id = Column(ForeignKey("Database.id"))
+    database = relationship("Database", foreign_keys=[database_id])
     database_object_id = Column(Integer, nullable=False)
     schema = Column(String(30), nullable=False)
-    database_name = Column(String(120), nullable=False)
 
     @property
     def long_name(self):
@@ -166,7 +168,7 @@ class DatabaseObject(Node):
 
     @property
     def full_name(self):
-        return f"{self.database_name}.{self.schema}.{self.name}"
+        return f"{self.database.name}.{self.schema}.{self.name}"
 
     @property
     def sql_actions(self):
@@ -276,7 +278,11 @@ class ClientQuery(Node, SQLQueryMixin):
     """
     __tablename__ = "ClientQuery"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
+    form_id = Column(ForeignKey("Form.id"), nullable=False)
+    form = relationship("Form", foreign_keys=[form_id])
     component_type = Column(String(120), nullable=False)
+    database_id = Column(ForeignKey("Database.id"))
+    database = relationship("Database", foreign_keys=[database_id])
 
     __mapper_args__ = {
         "polymorphic_identity": "Клиентский запрос"
@@ -287,33 +293,31 @@ class ClientQuery(Node, SQLQueryMixin):
         return ["sql", "component_type", "crc32"]
 
     @classmethod
-    def create_from(cls, original, **refs):
+    def create_from(cls, original, parent):
         """
         Собирает ORM-модель для компонента Delphi.
-        Исходные данные берутся из оригинального компонента с диска,
-        к модели присоединяются ссылки на форму и на соединение с БД.
+        Исходные данные берутся из оригинального компонента с диска.
 
         Дата обновления ставится немножко костыльно, так как
         узнать реальную дату обновления компонента невозможно.
         """
-        for param in ["parent", "connections"]:
-            if param not in refs:
-                raise ModelException(f"Пропущен именованный параметр {param}")
-        if original.connection is not None and original.connection not in refs["connections"]:
-            appname = refs["parent"].application.name
-            raise ModelException(f"Соединение {original.connection} не найдено в пуле соединений приложения {appname}")
         return ClientQuery(
             name=original.name,
             sql=original.sql,
             component_type=original.type,
             last_update=datetime.datetime.now(),
             crc32=original.crc32,
-            connection=refs["connections"].get(original.connection, None),
-            form=refs["parent"]
+            form=parent
         )
 
     def __repr__(self):
         return f"{self.name}: {self.component_type} "
+
+
+AppsAndForms = Table('AppsAndForms', BaseDPM.metadata,
+    Column('form_id', Integer, ForeignKey('Form.id')),
+    Column('application_id', Integer, ForeignKey('Application.id'))
+)
 
 
 class Form(Node):
@@ -327,7 +331,21 @@ class Form(Node):
     __tablename__ = "Form"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
     path = Column(String(1000), nullable=False)
+    applications = relationship(
+        "Application",
+        secondary=AppsAndForms,
+        back_populates="forms",
+        cascade="all, delete",
+        passive_deletes=True)
+    components = relationship(
+        "ClientQuery",
+        collection_class=attribute_mapped_collection("name"),
+        back_populates="form",
+        foreign_keys=[ClientQuery.form_id],
+        cascade='all, delete',
+        passive_deletes=True)
     alias = Column(String(50))
+    is_broken = Column(Boolean, nullable=False, default=False)
     parsing_error_message = Column(String(300))
 
     __mapper_args__ = {
@@ -339,66 +357,26 @@ class Form(Node):
         return ["alias", "is_broken", "parsing_error_message"]
 
     @classmethod
-    def create_from(cls, original, **refs):
+    def create_from(cls, original, parent):
         """
-        Собирает ORM-модель для формы из данных оригинала в исходниках,
-        присоединяет ссылку на АРМ.
+        Собирает ORM-модель для формы из данных оригинала в исходниках.
         """
-        if "parent" not in refs:
-            raise ModelException("Пропущен именованный параметр parent")
         return Form(
             name=original.name,
             alias=original.alias,
             last_update=original.last_update,
             path=original.path,
-            application=refs["parent"],
             is_broken=original.is_broken,
-            parsing_error_message=original.parsing_error_message
+            parsing_error_message=original.parsing_error_message,
+            applications=[parent]
         )
+
+    @property
+    def is_shared(self):
+        return len(self.applications) > 1
 
     def __repr__(self):
         return self.name
-
-
-class ClientConnection(Node):
-    """
-    Компонент-соединение, с помощью которого АРМ обращается к БД.
-    Учёт соединений необходим для того, чтобы знать, в контексте какой
-    базы данных выполняются запросы от компонентов на формах.
-    """
-    __tablename__ = "ClientConnection"
-    id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
-    # заполняется при создании из компонента
-    database_name = Column(String(50))
-    # если is_verified True, то данные соединения проверены вручную
-    # и связи подключённых к нему компонентов можно анализировать
-    is_verified = Column(Boolean, default=False, nullable=False)
-
-    __mapper_args__ = {
-        "polymorphic_identity": "Компонент-соединение"
-    }
-
-    @property
-    def sync_fields(self):
-        return ["database_name"]
-
-    @classmethod
-    def create_from(cls, original, **refs):
-        """
-        Создаёт модель клиентского соединения из оригинального
-        компонента в исходниках
-        """
-        if "parent" not in refs:
-            raise ModelException("Пропущен именованный параметр parent")
-        return ClientConnection(
-            name=original.full_name,
-            database_name=original.database,
-            application=refs["parent"]
-        )
-
-    def __repr__(self):
-        return f"Соединение {self.name} ({'???' if self.database is None else self.database.name})"
-
 
 class Application(Node):
     """
@@ -407,6 +385,15 @@ class Application(Node):
     __tablename__ = "Application"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
     path = Column(String(1000), nullable=False)
+    default_database_id = Column(ForeignKey("Database.id"))
+    default_database = relationship("Database", foreign_keys=[default_database_id])
+    forms = relationship(
+        "Form",
+        collection_class=attribute_mapped_collection("path"),
+        back_populates="applications",
+        secondary=AppsAndForms,
+        cascade="all, delete",
+        passive_deletes=True)
 
     __mapper_args__ = {
         "polymorphic_identity": "АРМ"
@@ -421,7 +408,7 @@ class Application(Node):
         return True
 
     @classmethod
-    def create_from(cls, original, **refs):
+    def create_from(cls, original, parent=None):
         return Application(
             name=original.name,
             last_update=original.last_update,
@@ -438,6 +425,11 @@ class DBScript(DatabaseObject, SQLQueryMixin):
     """
     __tablename__ = "DBScript"
     id = Column(Integer, ForeignKey("DatabaseObject.id"), primary_key=True)
+    database = relationship(
+        "Database",
+        back_populates="scripts",
+        foreign_keys=[DatabaseObject.database_id])
+    is_broken = Column(Boolean, nullable=False, default=False)
 
     __mapper_args__ = {
         "polymorphic_identity": "Запрос в БД"
@@ -447,23 +439,19 @@ class DBScript(DatabaseObject, SQLQueryMixin):
         return f"{self.full_name} : Запрос"
 
     @classmethod
-    def create_from(cls, original, **refs):
+    def create_from(cls, original, parent):
         """
         Собирает ORM-модель для исполняемого объекта БД.
-        Исходные данные берутся из системных таблиц исследуемой базы,
-        к модели присоединяется ссылка на базу информационной системы.
+        Исходные данные берутся из системных таблиц исследуемой базы.
         """
-        if "parent" not in refs:
-            raise ModelException("Пропущен именованный параметр parent")
         return cls(
             name=original.name,
             schema=original.schema,
-            database_name=refs["parent"].name,
             sql=original.sql,
             crc32=original.crc32,
             last_update=original.last_update,
             database_object_id=original.database_object_id,
-            database=refs["parent"]
+            database=parent
         )
 
     @property
@@ -541,6 +529,11 @@ class DBTrigger(DBScript):
     """
     __tablename__ = "DBTrigger"
     id = Column(ForeignKey("DBScript.id"), primary_key=True)
+    table_id = Column(ForeignKey("DBTable.id"), nullable=False)
+    table = relationship(
+        "DBTable",
+        back_populates="triggers",
+        foreign_keys=[table_id])
     is_update = Column(Boolean, nullable=False)
     is_delete = Column(Boolean, nullable=False)
     is_insert = Column(Boolean, nullable=False)
@@ -553,22 +546,18 @@ class DBTrigger(DBScript):
         return f"{self.full_name} : Триггер"
 
     @classmethod
-    def create_from(cls, original, **refs):
-        for param in ["table", "database"]:
-            if param not in refs:
-                raise ModelException(f"Пропущен именованный параметр {param}")
+    def create_from(cls, original, parent):
         return DBTrigger(
             name=original.name,
             schema=original.schema,
-            database_name=refs["database"].name,
             database_object_id=original.database_object_id,
             is_update=original.is_update,
             is_delete=original.is_delete,
             is_insert=original.is_insert,
             sql=original.sql,
             last_update=original.last_update,
-            table=refs["table"],
-            database=refs["database"]
+            table=parent,
+            database=parent.database
         )
 
 
@@ -578,7 +567,15 @@ class DBTable(DatabaseObject):
     """
     __tablename__ = "DBTable"
     id = Column(Integer, ForeignKey("DatabaseObject.id"), primary_key=True)
-
+    database = relationship(
+        "Database", back_populates="tables",
+        foreign_keys=[DatabaseObject.database_id])
+    triggers = relationship(
+        "DBTrigger",
+        collection_class=attribute_mapped_collection("long_name"),
+        back_populates="table", foreign_keys=[DBTrigger.table_id],
+        cascade="all, delete",
+        passive_deletes=True)
     __mapper_args__ = {
         "polymorphic_identity": "Таблица"
     }
@@ -587,16 +584,13 @@ class DBTable(DatabaseObject):
         return f"{self.full_name} : Таблица"
 
     @classmethod
-    def create_from(cls, original, **refs):
-        if "parent" not in refs:
-            raise ModelException("Пропущен именованный параметр parent")
+    def create_from(cls, original, parent):
         return DBTable(
             name=original.name,
             schema=original.schema,
-            database_name=refs["parent"].name,
             database_object_id=original.database_object_id,
             last_update=original.last_update,
-            database=refs["parent"]
+            database=parent
         )
 
     @property
@@ -614,7 +608,55 @@ class Database(Node):
     """
     __tablename__ = "Database"
     id = Column(Integer, ForeignKey("Node.id"), primary_key=True)
-
+    tables = relationship(
+        "DBTable",
+        collection_class=attribute_mapped_collection("long_name"),
+        back_populates="database",
+        foreign_keys=[DBTable.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
+    views = relationship(
+        "DBView",
+        collection_class=attribute_mapped_collection("long_name"),
+        back_populates="database",
+        foreign_keys=[DBView.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
+    procedures = relationship(
+        "DBStoredProcedure",
+        collection_class=attribute_mapped_collection("long_name"),
+        back_populates="database",
+        foreign_keys=[DBStoredProcedure.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
+    table_functions = relationship(
+        "DBTableFunction",
+        collection_class=attribute_mapped_collection("long_name"),
+        back_populates="database",
+        foreign_keys=[DBTableFunction.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
+    scalar_functions = relationship(
+        "DBScalarFunction",
+        collection_class=attribute_mapped_collection("long_name"),
+        back_populates="database",
+        foreign_keys=[DBScalarFunction.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
+    triggers = relationship(
+        "DBTrigger",
+        collection_class=attribute_mapped_collection("long_name"),
+        back_populates="database",
+        foreign_keys=[DBTrigger.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
+    scripts = relationship(
+        "DBScript",
+        collection_class=attribute_mapped_collection("long_name"),
+        back_populates="database",
+        foreign_keys=[DBScript.database_id],
+        cascade="all, delete",
+        passive_deletes=True)
     __mapper_args__ = {
         "polymorphic_identity": "База данных"
     }

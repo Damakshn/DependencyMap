@@ -59,7 +59,7 @@ class DelphiProject(Original):
                     # по максимальной среди форм дате обновления получаем дату обновления арма
                     if form_update > self.last_update:
                         self.last_update = form_update
-                    self.forms[form_path] = {"name": form_name, "path" :form_path, "last_update": form_update}
+                    self.forms[form_path] = DelphiForm(form_path)
                     if no_errors:
                         logging.info(f"Обработка проекта {self.path} завершена, все файлы прочитаны")
                     else:
@@ -83,10 +83,26 @@ class DelphiForm(Original):
             logging.error(msg)
             raise Exception(msg)
         self.last_update = datetime.datetime.fromtimestamp(os.path.getmtime(self.path))
-        logging.debug(f"Парсим форму {self.name}")
         self.is_broken = False
         self.parsing_error_message = None
         self.components = []
+
+    @property
+    def connections(self):
+        """
+        Словарь соединений формы
+        """
+        return {c.name: c for c in self.components if isinstance(c, DelphiConnection)}
+
+    @property
+    def queries(self):
+        """
+        Словарь компонентов, содержащих запросы к БД.
+        """
+        return {c.name: c for c in self.components if isinstance(c, DelphiQuery)}
+    
+    def parse(self):
+        logging.debug(f"Парсим форму {self.name}")
         try:
             loader = DFMLoader()
             file = open(self.path, "rb")
@@ -105,26 +121,11 @@ class DelphiForm(Original):
                     self.components.append(new_component)
                     logging.debug(f"Прочитан компонент {new_component}")
 
-    @property
-    def connections(self):
-        """
-        Словарь соединений формы
-        """
-        return {c.full_name: c for c in self.components if isinstance(c, DelphiConnection)}
-
-    @property
-    def queries(self):
-        """
-        Словарь компонентов, содержащих запросы к БД.
-        """
-        return {c.name: c for c in self.components if isinstance(c, DelphiQuery)}
-
 
 class DBComponent(Original):
 
     def __init__(self, data, form_alias):
-        self.name = data["name"]
-        self.full_name = f"{form_alias}.{self.name}"
+        self.name = f"{form_alias}.{data['name']}"
         self.type = data["type"]
 
     @classmethod
@@ -165,15 +166,25 @@ class DelphiConnection(DBComponent):
         connection_args = "".join(data["ConnectionString"]).split(";")
         for arg in connection_args:
             if arg.startswith("Initial Catalog"):
-                self.database = arg.split("=")[1].strip()
+                # извлекаем имя базы из свойств компонента
+                # если указано имя тестовой базы, то отрезаем _test в конце
+                dbname = arg.split("=")[1].strip()
+                #if dbname.endswith("_test"):
+                #    dbname = dbname[:dbname.find("_test")]
+                self.database = dbname
                 break
 
     def __repr__(self):
-        return f"{self.full_name} : TADOConnection; database: {self.database}"
+        return f"{self.name} : TADOConnection; database: {self.database}"
 
 
 class DelphiQuery(DBComponent, SQLProcessorMixin):
+    """
+    Класс, олицетворяющий компонент Delphi работающий с данными из базы (датасет).
 
+    ToDo есть компоненты, у которых несколько полей с запросами; также компонент TADOStoredProc не имеет поля
+    с текстом запроса.
+    """
     def __init__(self, data, form_alias):
         super(DelphiQuery, self).__init__(data, form_alias)
         self.sql = ""

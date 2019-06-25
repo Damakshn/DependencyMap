@@ -48,13 +48,13 @@ class OriginalDatabaseObject(DBOriginal):
         Возвращает коллекцию объектов-оригиналов, содержащую все объекты
         данного типа из той базы, с которой работает соединение conn.
 
-        Тип коллекции - словарь, ключ - поле full_name,
+        Тип коллекции - словарь, ключ - поле long_name,
         т.е. База.Схема.Название.
         """
         query = cls.query_for_all()
         # dict comprehension
         return {
-            obj.full_name: obj
+            obj.long_name: obj
             for obj in [cls(**record) for record in conn.execute(query)]
         }
 
@@ -213,7 +213,7 @@ class OriginalTrigger(OriginalScript):
         Возвращает коллекцию триггеров для одной таблицы по её object_id
         в БД.
 
-        Тип коллекции - словарь, ключ - поле full_name.
+        Тип коллекции - словарь, ключ - поле long_name.
         """
         query = text(
             """
@@ -237,7 +237,7 @@ class OriginalTrigger(OriginalScript):
                 and o.parent_object_id = :table_id""")
         # dict comprehension
         return {
-            obj.full_name: obj
+            obj.long_name: obj
             for obj in [
                 cls(**record)
                 for record in conn.execute(query, table_id=table_id)

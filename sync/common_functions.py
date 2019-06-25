@@ -7,17 +7,16 @@ from typing import List, Dict
 from dpm.models import (
     Application,
     Form,
-    ClientConnection,
     ClientQuery,
-    Link,
+    Edge,
     Node,
     DBTable,
     DBScalarFunction,
     DBTableFunction,
     DBView,
     DBStoredProcedure,
-    DBTrigger,
-    SystemReference)
+    DBTrigger
+    )
 from .delphi_classes import DelphiProject, DelphiForm, DelphiQuery, DelphiConnection
 import sync.original_models as original_models
 
@@ -32,8 +31,7 @@ def get_remaining_objects(session, cls) -> List[Node]:
     result.extend([item for item in session.new if isinstance(item, cls)])
     return result
 
-
-def sync_subordinate_members(originals: Dict, entities: Dict, session, edges: List):
+def sync_subordinate_members(originals: Dict, node_class, nodes: Dict, session, parent):
     """
     Самый главный метод всей синхронизации.
 
@@ -42,66 +40,28 @@ def sync_subordinate_members(originals: Dict, entities: Dict, session, edges: Li
 
     Метод определяет, какие объекты должны быть созданы, изменены или удалены.
 
-    Четвёртый параметр - ссылки на другие ORM-модели, которые нужно
-    прикрепить при создании/обновлении.
+    Аргументы:
+
+    originals - оригиналы объектов, прочитанные из исходников Delphi или из БД
+    информационной системы;
+
+    node_class - ссылка на модель данных в системе DPM, используется для создания нового экземпляра;
+
+    nodes - ноды графа зависимостей, взятые из БД DPM;
+
+    session - объект-сессия для работы с базой;
     """
-    for item in originals:
+    for object_key in originals:
         # объект есть на диске, но отсутствует в БД - создать
-        if item not in entities:
-            new_entity = make_new_entity_from(originals[item], **refs)
-            session.add(new_entity)
-            # если новый объект не является корневым узлом, то
-            # нужно создать связь от родительского объекта к нему
-            if isinstance(new_entity, Node) and not new_entity.is_root:
-                if not isinstance(new_entity, DBTrigger):
-                    parent = refs["parent"]
-                    session.add(Link(from_node=parent, to_node=new_entity))
-                else:
-                    parent_table = refs["table"]
-                    parent_db = refs["database"]
-                    session.add(Link(from_node=parent_table, to_node=new_entity))
-                    session.add(Link(from_node=parent_db, to_node=new_entity))
-        # объект есть и там, и там - сравнить и обновить, затем исключить объект из словаря
-        elif item in entities and needs_update(originals[item], entities[item]):
-            entities[item].update_from(originals[item], **refs)
-    for item in entities:
-        if item not in originals:
-            session.delete(entities[item])
-
-
-def make_new_entity_from(original, **refs) -> Node:
-    """
-    Создаёт новую системную сущность, класс которой
-    соответствует классу оригинала.
-
-    По-моему, этот метод ужасен.
-    """
-    # ноды клиента - АРМы, формы, компоненты, соединения
-    if isinstance(original, DelphiForm):
-        return Form.create_from(original, **refs)
-    if isinstance(original, DelphiQuery):
-        return ClientQuery.create_from(original, **refs)
-    if isinstance(original, DelphiProject):
-        return Application.create_from(original, **refs)
-    if isinstance(original, DelphiConnection):
-        return ClientConnection.create_from(original, **refs)
-    # ноды баз данных - процедуры, вьюхи, функции, таблицы, триггеры
-    if isinstance(original, original_models.OriginalProcedure):
-        return DBStoredProcedure.create_from(original, **refs)
-    if isinstance(original, original_models.OriginalTrigger):
-        return DBTrigger.create_from(original, **refs)
-    if isinstance(original, original_models.OriginalView):
-        return DBView.create_from(original, **refs)
-    if isinstance(original, original_models.OriginalTableFunction):
-        return DBTableFunction.create_from(original, **refs)
-    if isinstance(original, original_models.OriginalScalarFunction):
-        return DBScalarFunction.create_from(original, **refs)
-    if isinstance(original, original_models.OriginalTable):
-        return DBTable.create_from(original, **refs)
-    # системные зависимости (которые не являются нодами)
-    if isinstance(original, original_models.OriginalSystemReferense):
-        return SystemReference.create_from(original, **refs)
-
+        if object_key not in nodes:
+            new_node = node_class.create_from(originals[object_key], parent)
+            session.add(new_node)
+        # объект есть и там, и там - сравнить и обновить
+        elif object_key in nodes and needs_update(originals[object_key], nodes[object_key]):
+            nodes[object_key].update_from(originals[object_key])
+    for object_key in nodes:
+        if object_key not in originals:
+            session.delete(nodes[object_key])
 
 def needs_update(original, node) -> bool:
     """

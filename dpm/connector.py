@@ -11,13 +11,9 @@ class DriverNotFoundException(Exception):
 class Connector:
     """
     Класс, отвечающий за управление соединениями с БД.
-    Соединение с базой DPM и основными базами информационной системы
-    обрабатываются отдельно.
     Для инициализации требует словарь-конфиг с полями:
-        username_sql, password_sql, host_sql -
-        для подключения к боевым базам ИС;
-        host_dpm, password_dpm, host_dpm - для подключения к базе
-        ДПМ (пока неактивно, используем sqlite).
+        username_sql, password_sql, host_sql - для подключения к боевым базам ИС;
+        host_dpm, password_dpm, host_dpm - для подключения к базе ДПМ (пока неактивно, используем sqlite).
     """
 
     def __init__(self, **config):
@@ -47,6 +43,9 @@ class Connector:
         return available_drivers[len(available_drivers)-1]
 
     def connect_to_dpm(self):
+        """
+        Возвращает объект sessionmaker для работы с базой ДПМ.
+        """
         if self.__sessionmaker_dpm is None:
             engine = create_engine(self.url_dpm, echo=False)
             BaseDPM.metadata.create_all(engine)
@@ -70,7 +69,7 @@ class Connector:
                 password=self.__sqlserver_pswd,
                 host=self.__sqlserver_host,
                 database=db_name,
-                query=dict(driver=self.__driver_sql)
+                query=dict(driver=self.__driver_sql, MARS_Connection="Yes")
             )
             e = create_engine(url, echo=False)
             self.__connections[db_name] = e.connect()
