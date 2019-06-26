@@ -55,6 +55,7 @@ def prepare_test_sqlite_db(connector, config):
 	test_app_name = list(config["applications"].keys())[0]
 	path_to_app = test_app_config["path"]
 	test_db_name = config["databases"][0]
+	
 	# удаляем временную базу, если она осталась после предыдущего теста
 	#if os.path.exists(config["connector"]["host_dpm"][10:]):
 	#	os.remove(config["connector"]["host_dpm"][10:])

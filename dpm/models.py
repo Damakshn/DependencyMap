@@ -89,17 +89,15 @@ class Edge(BaseDPM):
     # если True, то один из соединяемых объектов является фиктивным
     is_dummy = Column(Boolean, default=False, nullable=False)
     # поля, описывающие что объект from_node делает с объектом to_node
-    # числовое значение указывает на число совпадений (кол-во использований)
-    contain = Column(Boolean, default=False, nullable=False)
-    connect = Column(Boolean, default=False, nullable=False)
-    call = Column(SmallInteger, default=0, nullable=False)
-    select = Column(SmallInteger, default=0, nullable=False)
-    insert = Column(SmallInteger, default=0, nullable=False)
-    update = Column(SmallInteger, default=0, nullable=False)
-    delete = Column(SmallInteger, default=0, nullable=False)
+    calc = Column(Boolean, default=False, nullable=False)
+    select = Column(Boolean, default=False, nullable=False)
+    insert = Column(Boolean, default=False, nullable=False)
+    update = Column(Boolean, default=False, nullable=False)
+    delete = Column(Boolean, default=False, nullable=False)
+    exec = Column(Boolean, default=False, nullable=False)
     truncate = Column(Boolean, default=False, nullable=False)
     drop = Column(Boolean, default=False, nullable=False)
-    trigger = Column(Boolean, default=False, nullable=False)
+    
     
 
     def __repr__(self):
@@ -204,7 +202,7 @@ class DatabaseObject(Node):
             chunks.append(fr"(?P<{action}>")
             for name in names:
                 if action == "select":
-                    chunks.append(fr" *join {name} | *{name},|from {name}[ ,]")
+                    chunks.append(fr" join {name} | {name},|from {name}[ ,]|, {name} [a-z]")
                 elif action == "update":
                     chunks.append(fr"update {name} ")
                 elif action == "insert":
@@ -215,6 +213,10 @@ class DatabaseObject(Node):
                     chunks.append(fr"truncate {name} ")
                 elif action == "drop":
                     chunks.append(fr"drop table {name} ")
+                elif action == "exec":
+                    chunks.append(fr"exec {name} |execute {name}")
+                elif action == "calc":
+                    chunks.append(fr"[ +\-*\/=\(]+{name}\(")
                 if name != names[len(names) - 1]:
                     chunks.append(r"|")
             if action != actions[len(actions) - 1]:
@@ -232,20 +234,20 @@ class DatabaseObject(Node):
         (Название, Схема.Название, БД.Схема.Название)
         """
         names = [
-            self.name,
-            f"{self.schema}.{self.name}",
-            self.full_name
+            self.name.lower(),
+            rf"{self.schema}\.{self.name}".lower(),
+            rf"{self.database.name}\.{self.schema}\.{self.name}".lower()
         ]
         return self.get_regexp_universal(self.sql_actions, names)
 
-    def get_regexp_for_external_db(self):
+    def get_regexp_for_foreign_db(self):
         """
         Получение регулярки для поиска в скриптах "чужой" БД.
 
         В этом случае используются только полное имя объекта -
         БД.Схема.Название
         """
-        return self.get_regexp_universal(self.sql_actions, [self.full_name])
+        return self.get_regexp_universal(self.sql_actions, [rf"{self.database.name}\.{self.schema}\.{self.name}".lower()])
 
 
 class SQLQueryMixin():
@@ -260,7 +262,7 @@ class SQLQueryMixin():
 
     @declared_attr
     def sql(cls):
-        return deferred(Column(Text, nullable=False))
+        return deferred(Column(Text))
 
 
 class ClientQuery(Node, SQLQueryMixin):
@@ -312,7 +314,6 @@ class ClientQuery(Node, SQLQueryMixin):
 
     def __repr__(self):
         return f"{self.name}: {self.component_type} "
-
 
 AppsAndForms = Table('AppsAndForms', BaseDPM.metadata,
     Column('form_id', Integer, ForeignKey('Form.id')),
@@ -464,7 +465,7 @@ class DBScript(DatabaseObject, SQLQueryMixin):
         Список действий, которые можно осуществлять со скриптом
         при его использовании в sql-коде.
         """
-        return ["select", "exec"]
+        return []
 
 
 class DBView(DBScript):
@@ -479,6 +480,14 @@ class DBView(DBScript):
 
     def __repr__(self):
         return f"{self.full_name} : Представление"
+    
+    @property
+    def sql_actions(self):
+        """
+        Список действий, которые можно осуществлять со скриптом
+        при его использовании в sql-коде.
+        """
+        return ["select", "update", "insert", "delete"]
 
 
 class DBScalarFunction(DBScript):
@@ -493,6 +502,14 @@ class DBScalarFunction(DBScript):
 
     def __repr__(self):
         return f"{self.full_name} : Скалярная функция"
+    
+    @property
+    def sql_actions(self):
+        """
+        Список действий, которые можно осуществлять со скалярной функцией
+        при её использовании в sql-коде.
+        """
+        return ["calc"]
 
 
 class DBTableFunction(DBScript):
@@ -507,6 +524,14 @@ class DBTableFunction(DBScript):
 
     def __repr__(self):
         return f"{self.full_name} : Табличная функция"
+    
+    @property
+    def sql_actions(self):
+        """
+        Список действий, которые можно осуществлять с табличной функцией
+        при её использовании в sql-коде.
+        """
+        return ["select"]
 
 
 class DBStoredProcedure(DBScript):
@@ -521,6 +546,14 @@ class DBStoredProcedure(DBScript):
 
     def __repr__(self):
         return f"{self.full_name} : Хранимая процедура"
+    
+    @property
+    def sql_actions(self):
+        """
+        Список действий, которые можно осуществлять с хранимой процедурой
+        при её использовании в sql-коде.
+        """
+        return ["exec"]
 
 
 class DBTrigger(DBScript):
@@ -559,6 +592,15 @@ class DBTrigger(DBScript):
             table=parent,
             database=parent.database
         )
+    
+    @property
+    def sql_actions(self):
+        """
+        Обращений к триггеру не бывает.
+        """
+        return []
+    
+
 
 
 class DBTable(DatabaseObject):

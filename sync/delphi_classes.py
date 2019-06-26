@@ -194,7 +194,7 @@ class DelphiQuery(DBComponent, SQLProcessorMixin):
         # если компонент - хранимая процедура, то текст запроса - название вызываемой процедуры
         if self.type == "TADOStoredProc":
             proc = data["ProcedureName"]
-            self.sql = proc if proc.find(";") < 0 else proc[:proc.find(";")]
+            self.sql = "exec " + (proc if proc.find(";") < 0 else proc[:proc.find(";")]) + " "
         else:
             # для остальных компонентов собираем текст запроса по частям
             # при этом каждый запрос компонента подписывается комментарием,
