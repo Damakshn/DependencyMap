@@ -12,10 +12,26 @@ import matplotlib.pyplot as plt
 import networkx as nx
 
 
-path_to_config = "config.json"
+def viz_test(app):
+	G = nx.DiGraph()
+	G.add_node(app.name, size=100, label=app.name)
+	for form_path in app.forms:
+		form_name = app.forms[form_path].alias
+		G.add_node(form_name, size=100, label=form_name)
+		G.add_edge(app.name, form_name)
+		for component in app.forms[form_path].components:
+			G.add_node(component, size=100, label=component)
+			G.add_edge(form_name, component)
+			for link in app.forms[form_path].components[component].edges_out:
+				G.add_node(link.to_node.name, size=100, label=link.to_node.name)
+				G.add_edge(form_name, link.to_node.name)
+	pos = nx.spring_layout(G)
+	nx.draw_networkx_nodes(G, pos)
+	nx.draw_networkx_edges(G, pos)
+	nx.draw_networkx_labels(G, pos)
+	plt.axis('off')
+	plt.show()
 
-def set_logger(logfile):
-	logging.basicConfig(filename=logfile, level=logging.DEBUG)
 
 def draw_graph_for(parent_node):
 	G = nx.Graph()
@@ -35,20 +51,11 @@ def draw_graph_for(parent_node):
 	print("Выводим результат")
 	plt.show()
 
-def draw_tables_for(database):
-	G = nx.Graph()
-	for table in database.tables:
-		G.add_edge(database.name, table.name)
-	print("Расставляем объекты")
-	pos = nx.spring_layout(G)  # positions for all nodes
-	print("Рисуем ноды")
-	nx.draw_networkx_nodes(G, pos, node_size=20)
-	print("Рисуем связи")
-	nx.draw_networkx_edges(G, pos)
-	print("Рисуем подписи")
-	nx.draw_networkx_labels(G, pos, font_size=5, font_family='sans-serif')
-	print("Выводим результат")
-	plt.show()
+path_to_config = "config.json"
+
+def set_logger(logfile):
+	logging.basicConfig(filename=logfile, level=logging.DEBUG)
+
 
 def prepare_test_sqlite_db(connector, config):
 	test_app_config = list(config["applications"].values())[0]
@@ -90,7 +97,9 @@ def prepare_test_sqlite_db(connector, config):
 	session.commit()
 	"""
 	# следующий этап - построение связей
-	analize_links(session, conn)
+	#analize_links(session, conn)
+
+	viz_test(session.query(models.Application).filter_by(name=test_app_name).one())
 
 def main():
 	config = read_config()

@@ -4,21 +4,7 @@
 нодами графа зависимостей.
 """
 from typing import List, Dict
-from dpm.models import (
-    Application,
-    Form,
-    ClientQuery,
-    Edge,
-    Node,
-    DBTable,
-    DBScalarFunction,
-    DBTableFunction,
-    DBView,
-    DBStoredProcedure,
-    DBTrigger
-    )
-from .delphi_classes import DelphiProject, DelphiForm, DelphiQuery, DelphiConnection
-import sync.original_models as original_models
+from dpm.models import Node
 
 
 def get_remaining_objects(session, cls) -> List[Node]:

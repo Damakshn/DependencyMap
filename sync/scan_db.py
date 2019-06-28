@@ -1,4 +1,4 @@
-from sqlalchemy.orm import selectinload, joinedload
+from sqlalchemy.orm import selectinload
 from .common_classes import SyncException
 from dpm.models import (
     Database,
@@ -11,9 +11,8 @@ from dpm.models import (
     DBScript,
     Edge)
 import sync.original_models as original_models
-from .common_functions import (
-    sync_subordinate_members,
-    get_remaining_objects)
+from .common_functions import sync_subordinate_members
+
 from typing import List, Dict
 import itertools
 import logging

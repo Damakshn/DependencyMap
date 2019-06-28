@@ -1,5 +1,5 @@
 import re
-from .models import Edge, Database, DBScript, ClientQuery, DatabaseObject, DBTable
+from .models import Edge, DBScript, ClientQuery, DatabaseObject
 from sqlalchemy.sql import text
 from sqlalchemy import or_
 import logging
