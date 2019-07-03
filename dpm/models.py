@@ -71,10 +71,10 @@ class Edge(BaseDPM):
     __tablename__ = "Edge"
     id = Column(Integer, primary_key=True)
     # какие сущности соединены
-    from_node_id = Column(Integer, ForeignKey("Node.id"), nullable=False)
-    from_node = relationship("Node", foreign_keys=[from_node_id])
-    to_node_id = Column(Integer, ForeignKey("Node.id"), nullable=False)
-    to_node = relationship("Node", foreign_keys=[to_node_id])
+    sourse_id = Column(Integer, ForeignKey("Node.id"), nullable=False)
+    sourse = relationship("Node", foreign_keys=[sourse_id])
+    dest_id = Column(Integer, ForeignKey("Node.id"), nullable=False)
+    dest = relationship("Node", foreign_keys=[dest_id])
     comment = Column(Text)
     # если is_verified True, то связь считается подтверждённой;
     # подтверждённая связь не будет стёрта при обновлении;
@@ -88,7 +88,7 @@ class Edge(BaseDPM):
     is_broken = Column(Boolean, default=False, nullable=False)
     # если True, то один из соединяемых объектов является фиктивным
     is_dummy = Column(Boolean, default=False, nullable=False)
-    # поля, описывающие что объект from_node делает с объектом to_node
+    # поля, описывающие что объект sourse делает с объектом dest
     calc = Column(Boolean, default=False, nullable=False)
     select = Column(Boolean, default=False, nullable=False)
     insert = Column(Boolean, default=False, nullable=False)
@@ -101,16 +101,16 @@ class Edge(BaseDPM):
     
 
     def __repr__(self):
-        if isinstance(self.from_node, DBScript):
-            from_node_name = self.from_node.full_name
+        if isinstance(self.sourse, DBScript):
+            sourse_node_name = self.sourse.full_name
         else:
-            from_node_name = self.from_node.name
+            sourse_node_name = self.sourse.name
 
-        if isinstance(self.to_node, DBScript):
-            to_node_name = self.to_node.full_name
+        if isinstance(self.dest, DBScript):
+            dest_node_name = self.dest.full_name
         else:
-            to_node_name = self.to_node.name
-        return f"{from_node_name} -> {to_node_name}"
+            dest_node_name = self.dest.name
+        return f"{sourse_node_name} -> {dest_node_name}"
 
 """
 добавляем классу Node зависимости от Edge
@@ -119,12 +119,12 @@ class Edge(BaseDPM):
 """
 Node.edges_in = relationship(
     "Edge",
-    foreign_keys=[Edge.to_node_id],
+    foreign_keys=[Edge.dest_id],
     cascade="all, delete",
     passive_deletes=True)
 Node.edges_out = relationship(
     "Edge",
-    foreign_keys=[Edge.from_node_id],
+    foreign_keys=[Edge.sourse_id],
     cascade="all, delete",
     passive_deletes=True)
 
