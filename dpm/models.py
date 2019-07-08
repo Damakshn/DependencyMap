@@ -62,6 +62,13 @@ class Node(BaseDPM):
 
     def get_formatted_update_date(self):
         return self.last_update.strftime("%d.%m.%Y %H:%M")
+    
+    @property
+    def label(self):
+        """
+        Возвращает подпись, которую будет иметь нода при обработке графа.
+        """
+        return self.name
 
 
 class Edge(BaseDPM):
@@ -375,6 +382,13 @@ class Form(Node):
     @property
     def is_shared(self):
         return len(self.applications) > 1
+    
+    @property
+    def label(self):
+        """
+        Возвращает подпись, которую будет иметь нода при обработке графа.
+        """
+        return self.alias
 
     def __repr__(self):
         return self.name

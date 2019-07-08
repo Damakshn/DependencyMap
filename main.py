@@ -28,15 +28,14 @@ def prepare_test_sqlite_db(connector, config):
 	#if os.path.exists(config["connector"]["host_dpm"][10:]):
 	#	os.remove(config["connector"]["host_dpm"][10:])
 	session = connector.connect_to_dpm()
-	
-	logging.info(f"Соединяемся с базой {config['testdb']}")
-	#try:
-	#	conn = connector.connect_to(config["testdb"])
-	#except Exception as e:
-	#	logging.critical(f"Не удалось соединиться с БД {config['testdb']}; убедитесь, что у вас есть права для этого.")
-	#	exit()
-	
 	"""
+	logging.info(f"Соединяемся с базой {config['testdb']}")
+	try:
+		conn = connector.connect_to(config["testdb"])
+	except Exception as e:
+		logging.critical(f"Не удалось соединиться с БД {config['testdb']}; убедитесь, что у вас есть права для этого.")
+		exit()
+	
 	# создаём тестовый АРМ, чтобы синхронизировать его
 	d = datetime.datetime.now()
 	# создаём искусственную дату обновления, чтобы синхронизация сработала
@@ -62,9 +61,9 @@ def prepare_test_sqlite_db(connector, config):
 	# следующий этап - построение связей
 	#analize_links(session, conn)
 	#session.commit()
-	#viz_test(session.query(models.Application).filter_by(name=test_app_name).one())
+		
+	viz.draw_graph(gw.build_graph_in_depth(session.query(models.Application).filter_by(name=test_app_name).one()))
 	
-	viz.draw_graph(gw.get_application_graph(session.query(models.Application).filter_by(name=test_app_name).one()))
 
 def main():
 	config = read_config()

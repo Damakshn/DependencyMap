@@ -4,35 +4,59 @@ import dpm.graphsworks as gw
 
 
 def get_config():
+	"""
+	Возвращает словарь с настройками отрисовки вершин и рёбер различных типов.
+	"""
+	# ToDo вынести в конфиг
+	# ToDo добавить настройки рисования связи между таблицей и её триггером
 	# colors here https://www.rapidtables.com/web/color/html-color-codes.html
 	# markers here https://matplotlib.org/3.1.0/api/markers_api.html#module-matplotlib.markers
 	return {
-		"Database":          {"node_size": 500, "node_color": "#FFD700", "node_shape": "*", "linewidths": 0.5, "edgecolors": "black"},
-		"Application":       {"node_size": 300, "node_color": "#696969", "node_shape": "p", "linewidths": 0.5, "edgecolors": "black"},
-		"Form":              {"node_size": 100, "node_color": "#FF4500", "node_shape": "s", "linewidths": 0.5, "edgecolors": "black"},
-		"ClientQuery":       {"node_size": 50,  "node_color": "#00FFFF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
-		"DBTrigger":         {"node_size": 70,  "node_color": "#FF0000", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
-		"DBStoredProcedure": {"node_size": 50,  "node_color": "#4B0082", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
-		"DBView":            {"node_size": 50,  "node_color": "#32CD32", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
-		"DBTableFunction":   {"node_size": 50,  "node_color": "#A0522D", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
-		"DBScalarFunction":  {"node_size": 50,  "node_color": "#FF00FF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
-		"DBTable":           {"node_size": 100, "node_color": "#000000", "node_shape": "s", "linewidths": 0.5, "edgecolors": "black"},
+		"nodes": {
+			"Database":          {"node_size": 500, "node_color": "#FFD700", "node_shape": "*", "linewidths": 0.5, "edgecolors": "black"},
+			"Application":       {"node_size": 300, "node_color": "#696969", "node_shape": "p", "linewidths": 0.5, "edgecolors": "black"},
+			"Form":              {"node_size": 100, "node_color": "#FF4500", "node_shape": "s", "linewidths": 0.5, "edgecolors": "black"},
+			"ClientQuery":       {"node_size": 50,  "node_color": "#00FFFF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
+			"DBTrigger":         {"node_size": 70,  "node_color": "#FF0000", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
+			"DBStoredProcedure": {"node_size": 50,  "node_color": "#4B0082", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
+			"DBView":            {"node_size": 50,  "node_color": "#32CD32", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
+			"DBTableFunction":   {"node_size": 50,  "node_color": "#A0522D", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
+			"DBScalarFunction":  {"node_size": 50,  "node_color": "#FF00FF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
+			"DBTable":           {"node_size": 100, "node_color": "#DCDCDC", "node_shape": "s", "linewidths": 0.5, "edgecolors": "black"},
+		},
+		"edges": {
+			"select":   {"width": 0.9, "edge_color": "#32CD32", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"insert":   {"width": 0.9, "edge_color": "#FF4500", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"update":   {"width": 0.9, "edge_color": "#00FFFF", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"delete":   {"width": 0.9, "edge_color": "#DC143C", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"exec":     {"width": 0.9, "edge_color": "#9400D3", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"drop":     {"width": 1.5, "edge_color": "#FF0000", "style": "solid", "alpha": 1.0, "arrows": True, "label": None},
+			"truncate": {"width": 1.0, "edge_color": "#9400D3", "style": "solid", "alpha": 1.0, "arrows": True, "label": None},
+			"contain":  {"width": 0.9, "edge_color": "#000000", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"calc":     {"width": 0.9, "edge_color": "#9400D3", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"trigger":  {"width": 0.9, "edge_color": "#FFD700", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+		}
 	}
 
 
-
 def draw_graph(G):
+	
 	config = get_config()
+	
 	pos = nx.spring_layout(G)
 	
-	for class_name in config:
-		nx.draw_networkx_nodes(G, pos, [n for n in G.node if G.node[n]["node_class"]==class_name], **config[class_name])
+	for class_name in config["nodes"]:
+		nx.draw_networkx_nodes(G, pos, [n for n in G.node if G.node[n]["node_class"]==class_name], **config["nodes"][class_name])
 
-	nx.draw_networkx_edges(G, pos, [e for e in G.edges()], width=0.3, alpha=0.4)
+	for operation in config["edges"]:
+		nx.draw_networkx_edges(G, pos, [e for e in G.edges if G.adj[e[0]][e[1]][0].get(operation)==True], **config["edges"][operation])
+
+	#nx.draw_networkx_edges(G, pos, [e for e in G.edges()], width=0.3, alpha=0.4)
 	nx.draw_networkx_labels(G, pos, {n:G.node[n]["label"] for n in G.node}, font_size=8)
 
 	plt.axis('off')
 	plt.show()
+	
 
 def draw_table_graph(tbl, select=True, insert=True, update=True, delete=True):
 	G = nx.Graph()
