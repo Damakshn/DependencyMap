@@ -62,7 +62,7 @@ def prepare_test_sqlite_db(connector, config):
 	#analize_links(session, conn)
 	#session.commit()
 		
-	viz.draw_graph(gw.build_graph_in_depth(session.query(models.Application).filter_by(name=test_app_name).one()))
+	viz.draw_graph(gw.build_graph_in_depth(session.query(models.Database).filter_by(name=test_db_name).one()))
 	
 
 def main():

@@ -22,84 +22,72 @@ import itertools
 от ноды формы, правильно визуализировать связи нужных типов, дозапрашивать данные из базы по id объекта.
 """
 
-def merge_subgraph(graph, subgraph, *edge_attrs, reverse=False):
-    graph.add_nodes_from(subgraph.nodes(data=True))
-    graph.add_edges_from(subgraph.edges(data=True))
-    for attr in edge_attrs:
-        # соединяем ребром центральные элементы, относительно которых построены графы
-        if reverse:
-            from_node = subgraph.graph["central_node_id"]
-            to_node = graph.graph["central_node_id"]
-        else:
-            from_node = graph.graph["central_node_id"]
-            to_node = subgraph.graph["central_node_id"]
-        graph.add_edge(from_node, to_node, **{attr: True})
-
-def build_graph_up(node):
-    """
-    Строит граф объектов, зависимых от заданного, рекурсивно двигаясь вверх по иерархии объектов (изнутри наружу).
-    """
-    G = nx.MultiDiGraph(central_node_id=node.id)
-    G.add_node(node.id, label=node.label, node_class=node.__class__.__name__, id=node.id)
-    if isinstance(node, models.Database) or isinstance(node, models.Application):
-        return
-    elif isinstance(node, models.Form):
-        for app in node.applications:
-            G.add_node(app.id, label=app.label, node_class=app.__class__.__name__, id=app.id)
-            G.add_edge(app.id, node.id, contain=True)
-    elif isinstance(node, models.ClientQuery):
-        subgraph = build_graph_up(node.form)
-        merge_subgraph(G, subgraph, "contain", reverse=True)
-    else:
-        edge_template = ["calc", "select", "insert", "update", "delete", "exec", "drop", "truncate"]
-        for e in node.edges_in:
-            # защита от рекурсивных вызовов, где ребро графа циклическое
-            if e.sourse.id == e.dest.id:
-                continue
-            subgraph = build_graph_up(e.sourse)
-            merge_subgraph(G, subgraph, *[attr for attr in edge_template if getattr(e,attr,False) == True], reverse=True)
-    return G
 
 def build_graph_in_depth(node):
     """
     Строит граф объектов, от которых зависит заданный объект, рекурсивно копая вглубь.
     """
-    G = nx.MultiDiGraph(central_node_id=node.id)
-    G.add_node(node.id, label=node.label, node_class=node.__class__.__name__, id=node.id)
+    G = nx.MultiDiGraph()
+    fill_graph_in_depth(G, node)
+    return G
+
+def fill_graph_in_depth(G, parent_node):
+    G.add_node(parent_node.id, label=parent_node.label, node_class=parent_node.__class__.__name__, id=parent_node.id)
     # не используем поле scripts, так как оно включает в себя триггеры, а их мы подберём, строя графы для таблиц
-    if isinstance(node, models.Database):
+    if isinstance(parent_node, models.Database):
         for obj in itertools.chain(
-            node.tables.values(), 
-            node.scalar_functions.values(),
-            node.table_functions.values(),
-            node.procedures.values(),
-            node.views.values()
+            parent_node.tables.values(),
+            parent_node.scalar_functions.values(),
+            parent_node.table_functions.values(),
+            parent_node.procedures.values(),
+            parent_node.views.values()
         ):
-            subgraph = build_graph_in_depth(obj)
-            merge_subgraph(G, subgraph, "contain")
-    elif isinstance(node, models.Application):
-        for form in node.forms.values():
-            subgraph = build_graph_in_depth(form)
-            merge_subgraph(G, subgraph, "contain")
-    elif isinstance(node, models.Form):
-        for component in node.components.values():
-            subgraph = build_graph_in_depth(component)
-            merge_subgraph(G, subgraph, "contain")
-    elif isinstance(node, models.DBTable):
-        for trigger in node.triggers.values():
-            subgraph = build_graph_in_depth(trigger)
-            merge_subgraph(G, subgraph, "trigger")
+            connect_deeper_node(G, parent_node, obj, "contain")
+    elif isinstance(parent_node, models.Application):
+        for form in parent_node.forms.values():
+            connect_deeper_node(G, parent_node, form, "contain")
+    elif isinstance(parent_node, models.Form):
+        for component in parent_node.components.values():
+           connect_deeper_node(G, parent_node, component, "contain")
+    elif isinstance(parent_node, models.DBTable):
+        for trigger in parent_node.triggers.values():
+            connect_deeper_node(G, parent_node, trigger, "contain")
     else:
         edge_template = ["calc", "select", "insert", "update", "delete", "exec", "drop", "truncate"]
-        for e in node.edges_out:
+        for e in parent_node.edges_out:
+            # защита от рекурсивных вызовов скалярных функций, где ребро графа циклическое
+            if e.sourse.id == e.dest.id:
+                continue
+            # защита от зацикливания на триггерах
+            if isinstance(e.sourse, models.DBTrigger) and e.sourse.table_id == e.dest_id:
+                continue
+            connect_deeper_node(G, parent_node, e.dest, *[attr for attr in edge_template if getattr(e,attr,False) == True])
+
+def build_graph_up(node):
+    """
+    Строит граф объектов, зависимых от заданного, рекурсивно двигаясь вверх по иерархии объектов (изнутри наружу).
+    """
+    G = nx.MultiDiGraph()
+    fill_graph_up(G, node)
+    return G
+
+def fill_graph_up(G, child_node):
+    G.add_node(child_node.id, label=child_node.label, node_class=child_node.__class__.__name__, id=child_node.id)
+    if isinstance(child_node, models.Database) or isinstance(child_node, models.Application):
+        return
+    elif isinstance(child_node, models.Form):
+        for app in child_node.applications:
+            G.add_node(app.id, label=app.label, node_class=app.__class__.__name__, id=app.id)
+            G.add_edge(app.id, child_node.id, contain=True)
+    elif isinstance(child_node, models.ClientQuery):
+        connect_upper_node(G, child_node, child_node.form, "contain")
+    else:
+        edge_template = ["calc", "select", "insert", "update", "delete", "exec", "drop", "truncate"]
+        for e in child_node.edges_in:
             # защита от рекурсивных вызовов, где ребро графа циклическое
             if e.sourse.id == e.dest.id:
                 continue
-            if isinstance(e.sourse, models.DBTrigger) and e.sourse.table_id == e.dest_id:
-                continue
-            subgraph = build_graph_in_depth(e.dest)
-            merge_subgraph(G, subgraph, *[attr for attr in edge_template if getattr(e,attr,False) == True])
-    return G
+            connect_upper_node(G, child_node, e.sourse, *[attr for attr in edge_template if getattr(e,attr,False) == True])
 
 def build_full_graph(node):
     G1 = build_graph_up(node)
@@ -108,61 +96,20 @@ def build_full_graph(node):
     G1.add_edges_from(G2.edges(data=True))
     return G1
 
-# методы, списанные в утиль, могут пригодиться в дальнейшем
-"""
-def get_application_graph(app):
-    G = nx.MultiDiGraph()
-    G.add_node(app.id, label=app.label, node_class=app.__class__.__name__, id=app.id)
-    for form in app.forms.values():
-        subgraph = get_form_graph(form)
-        G.add_nodes_from(subgraph.nodes(data=True))
-        G.add_edges_from(subgraph.edges(data=True))
-        G.add_edge(app.id, form.id, contain=True)
-            
-    return G
+def connect_deeper_node(G, sourse, dest, *edge_attrs):
+    # защита от бесконечной рекурсии
+    # закапываемся в зависимости вершины только тогда, когда её ещё нет в графе
+    if not dest.id in G:
+        fill_graph_in_depth(G, dest)
 
-def get_form_graph(form):
-    G = nx.MultiDiGraph()
-    G.add_node(form.id, label=form.label, node_class=form.__class__.__name__)
-    for component in form.components.values():
-        subgraph = get_query_graph(component)
-        G.add_nodes_from(subgraph.nodes(data=True))
-        G.add_edges_from(subgraph.edges(data=True))
-        G.add_edge(form.id, component.id, contain=True)
-    return G
+    for attr in edge_attrs:
+        G.add_edge(sourse.id, dest.id, **{attr: True})
 
-def get_query_graph(query):
-    G = nx.MultiDiGraph()
-    edge_template = ["select", "insert", "update", "delete", "exec", "drop", "truncate"]
-    G.add_node(query.id, label=query.label, node_class=query.__class__.__name__, id=query.id)
-    for e in query.edges_out:
-        # защита от рекурсивных вызовов, где ребро графа циклическое
-        if e.sourse.id == e.dest.id:
-            continue
-        subgraph = get_query_graph(e.dest)
-        G.add_nodes_from(subgraph.nodes(data=True))
-        G.add_edges_from(subgraph.edges(data=True))
-        for attr in edge_template:
-            if getattr(e, attr, False) == True:
-                G.add_edge(query.id, e.dest.id, **{attr: True})
-    return G
+def connect_upper_node(G, dest, sourse, *edge_attrs):
+    # защита от бесконечной рекурсии
+    # закапываемся в зависимости вершины только тогда, когда её ещё нет в графе
+    if not sourse.id in G:
+        fill_graph_up(G, sourse)
 
-def dig_for_dependencies(graph, objects, iteration=1):
-    
-    #Дополняет граф graph новыми вершинами и рёбрами,
-    #идя вглубь по ссылкам зависимостей, идущим от объектов objects.
-    
-    next_wave = []
-    for obj in objects:
-        for e in obj.edges_out:
-            edge_template = ["select", "insert", "update", "delete", "exec", "drop", "truncate"]
-            # если у очередной вершины есть рёбра, которые идут дальше, то включаем её в следующую волну
-            # а также
-            # блокируем ссылки скриптов на самих себя в результате рекурсивных вызовов
-            if len(e.dest.edges_out) > 0 and (e.dest.id != e.sourse.id):
-                next_wave.append(e.dest)
-            graph.add_node(e.dest.id, label=e.dest.label, id=e.dest.id)
-            graph.add_edge(obj.id, e.dest.id, **{attr: getattr(e, attr) for attr in edge_template})
-    if len(next_wave) > 0 and iteration <= 30:
-        dig_for_dependencies(graph, next_wave, iteration+1)
-"""
+    for attr in edge_attrs:
+        G.add_edge(sourse.id, dest.id, **{attr: True})

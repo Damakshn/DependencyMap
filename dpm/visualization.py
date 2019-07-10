@@ -13,28 +13,28 @@ def get_config():
 	# markers here https://matplotlib.org/3.1.0/api/markers_api.html#module-matplotlib.markers
 	return {
 		"nodes": {
-			"Database":          {"node_size": 500, "node_color": "#FFD700", "node_shape": "*", "linewidths": 0.5, "edgecolors": "black"},
-			"Application":       {"node_size": 300, "node_color": "#696969", "node_shape": "p", "linewidths": 0.5, "edgecolors": "black"},
-			"Form":              {"node_size": 100, "node_color": "#FF4500", "node_shape": "s", "linewidths": 0.5, "edgecolors": "black"},
-			"ClientQuery":       {"node_size": 50,  "node_color": "#00FFFF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
-			"DBTrigger":         {"node_size": 70,  "node_color": "#FF0000", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
-			"DBStoredProcedure": {"node_size": 50,  "node_color": "#4B0082", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
-			"DBView":            {"node_size": 50,  "node_color": "#32CD32", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
-			"DBTableFunction":   {"node_size": 50,  "node_color": "#A0522D", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
-			"DBScalarFunction":  {"node_size": 50,  "node_color": "#FF00FF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "black"},
-			"DBTable":           {"node_size": 100, "node_color": "#DCDCDC", "node_shape": "s", "linewidths": 0.5, "edgecolors": "black"},
+			"Database":          {"node_size": 1600, "node_color": "#FFFF00", "node_shape": "*", "linewidths": 3.5, "edgecolors": "#FFD700"}, # золотая звезда
+			"Application":       {"node_size": 1600, "node_color": "#00BFFF", "node_shape": "p", "linewidths": 2.5, "edgecolors": "#00008B"}, # синий пятиугольник 
+			"Form":              {"node_size": 300,  "node_color": "#FF4500", "node_shape": "s", "linewidths": 0.5, "edgecolors": "#000000"}, # оранжевый квадрат
+			"ClientQuery":       {"node_size": 50,   "node_color": "#FF4500", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#00BFFF"}, # оранжевый ромб
+			"DBTrigger":         {"node_size": 50,   "node_color": "#FF0000", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#DC143C"}, # красный ромб
+			"DBStoredProcedure": {"node_size": 50,   "node_color": "#00BFFF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#0000FF"}, # гобубой ромб
+			"DBView":            {"node_size": 50,   "node_color": "#32CD32", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#000000"},
+			"DBTableFunction":   {"node_size": 50,   "node_color": "#A0522D", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#000000"},
+			"DBScalarFunction":  {"node_size": 50,   "node_color": "#FF00FF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#000000"},
+			"DBTable":           {"node_size": 100,  "node_color": "#DCDCDC", "node_shape": "s", "linewidths": 0.5, "edgecolors": "#000000"},
 		},
 		"edges": {
-			"select":   {"width": 0.9, "edge_color": "#32CD32", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
-			"insert":   {"width": 0.9, "edge_color": "#FF4500", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
-			"update":   {"width": 0.9, "edge_color": "#00FFFF", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
-			"delete":   {"width": 0.9, "edge_color": "#DC143C", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
-			"exec":     {"width": 0.9, "edge_color": "#9400D3", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"select":   {"width": 0.3, "edge_color": "#32CD32", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"insert":   {"width": 0.3, "edge_color": "#FF4500", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"update":   {"width": 0.3, "edge_color": "#00FFFF", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"delete":   {"width": 0.3, "edge_color": "#DC143C", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"exec":     {"width": 0.3, "edge_color": "#0000FF", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
 			"drop":     {"width": 1.5, "edge_color": "#FF0000", "style": "solid", "alpha": 1.0, "arrows": True, "label": None},
 			"truncate": {"width": 1.0, "edge_color": "#9400D3", "style": "solid", "alpha": 1.0, "arrows": True, "label": None},
-			"contain":  {"width": 0.9, "edge_color": "#000000", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
-			"calc":     {"width": 0.9, "edge_color": "#9400D3", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
-			"trigger":  {"width": 0.9, "edge_color": "#FFD700", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"contain":  {"width": 0.3, "edge_color": "#000000", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"calc":     {"width": 0.3, "edge_color": "#9400D3", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
+			"trigger":  {"width": 0.3, "edge_color": "#FFD700", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
 		}
 	}
 
@@ -47,70 +47,15 @@ def draw_graph(G):
 	
 	for class_name in config["nodes"]:
 		nx.draw_networkx_nodes(G, pos, [n for n in G.node if G.node[n]["node_class"]==class_name], **config["nodes"][class_name])
-
+	
 	for operation in config["edges"]:
 		nx.draw_networkx_edges(G, pos, [e for e in G.edges if G.adj[e[0]][e[1]][0].get(operation)==True], **config["edges"][operation])
-
-	#nx.draw_networkx_edges(G, pos, [e for e in G.edges()], width=0.3, alpha=0.4)
-	nx.draw_networkx_labels(G, pos, {n:G.node[n]["label"] for n in G.node}, font_size=8)
+	
+	nx.draw_networkx_labels(G, pos, {n:G.node[n]["label"] for n in G.node}, font_size=6)
 
 	plt.axis('off')
 	plt.show()
-	
 
-def draw_table_graph(tbl, select=True, insert=True, update=True, delete=True):
-	G = nx.Graph()
-	G.add_node(tbl.name, label=tbl.name, node_class="DBTable")
-	if select:
-		for e in [e for e in tbl.edges_in if e.select]:
-			G.add_node(e.from_node.name, label=e.from_node.name)
-			G.add_edge(e.from_node.name, tbl.name, edge_class="select")
-	if insert:
-		for e in [e for e in tbl.edges_in if e.insert]:
-			G.add_node(e.from_node.name, label=e.from_node.name)
-			G.add_edge(e.from_node.name, tbl.name, edge_class="insert")
-	if update:
-		for e in [e for e in tbl.edges_in if e.update]:
-			G.add_node(e.from_node.name, label=e.from_node.name)
-			G.add_edge(e.from_node.name, tbl.name, edge_class="update")
-	if delete:
-		for e in [e for e in tbl.edges_in if e.delete]:
-			G.add_node(e.from_node.name, label=e.from_node.name)
-			G.add_edge(e.from_node.name, tbl.name, edge_class="delete")
-	
-	pos = nx.spring_layout(G)
-
-	nx.draw_networkx_edges(G, pos, [e for e in G.edges() if G.edges()[e]["edge_class"]=="select"], edge_color='black', width=1, alpha=0.5)
-	nx.draw_networkx_edges(G, pos, [e for e in G.edges() if G.edges()[e]["edge_class"]=="insert"], edge_color='blue',  width=1, alpha=0.5)
-	nx.draw_networkx_edges(G, pos, [e for e in G.edges() if G.edges()[e]["edge_class"]=="update"], edge_color='cyan',  width=1, alpha=0.5)
-	nx.draw_networkx_edges(G, pos, [e for e in G.edges() if G.edges()[e]["edge_class"]=="delete"], edge_color='red',   width=1, alpha=0.5)
-	
-	nx.draw_networkx_nodes(G, pos, [n for n in G.node if n != tbl.name], node_size=50, node_color='green')
-
-	nx.draw_networkx_nodes(G, pos, [tbl.name], node_color='red')
-	nx.draw_networkx_labels(G, pos)
-	plt.axis('off')
-	plt.show()
-	
-def draw_form_graph(form):
-	G = nx.Graph()
-	G.add_node(form.name, label=form.name, node_class="Form")
-	for component_name in form.components:
-		G.add_node(component_name, lable=component_name, node_class="Component")
-		G.add_edge(form.name, component_name, edge_class="from_form_to_component")
-		for e in form.components[component_name].edges_out:
-			G.add_node(e.to_node.name, label=e.to_node.name, node_class="DBObject")
-			G.add_edge(component_name, e.to_node.name, edge_class="from_component_to_dbobject", tmplt={'raz':1, 'dva': 2})
-	
-	pos = nx.spring_layout(G)
-	nx.draw_networkx_edges(G, pos, G.edges(), edge_color='black', width=0.3, alpha=0.5)
-	nx.draw_networkx_nodes(G, pos, [form.name], node_size=200, node_color='red', node_shape="s")
-	nx.draw_networkx_nodes(G, pos, [n for n in G.node if G.node[n]["node_class"]=="Component"], node_size=50, node_color='purple')
-	nx.draw_networkx_nodes(G, pos, [n for n in G.node if G.node[n]["node_class"]=="DBObject"], node_size=50, node_color='black')
-	nx.draw_networkx_labels(G, pos)
-	plt.axis('off')
-	plt.show()
-	
 
 def draw_dependency_between():
 	# путь от одного объекта к другому
