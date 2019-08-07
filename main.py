@@ -64,6 +64,7 @@ def prepare_test_sqlite_db(connector, config):
 		
 	viz.draw_graph(gw.build_graph_in_depth(session.query(models.Database).filter_by(name=test_db_name).one()))
 	
+	
 
 def main():
 	config = read_config()
