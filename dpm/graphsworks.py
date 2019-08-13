@@ -15,7 +15,7 @@ import itertools
     node_id - id ноды из базы;
 
 Атрибуты рёбер:
-    select, insert, update, delete, exec, drop, truncate, contain, trigger - ставится True/False, показывает набор операций, которые
+    select, insert, update, delete, exec, drop, truncate, contain, trigger, calc - ставится True/False, показывает набор операций, которые
     объект A осуществляет с объектом B.
 
 Атрибуты нужны для того, чтобы при обработке графа можно было отличить, например, ноду таблицы

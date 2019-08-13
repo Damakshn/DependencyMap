@@ -1,6 +1,7 @@
 from PySide2 import QtWidgets, QtGui
 import sys
 from browseObject import BrowseObjectWidget
+from browseGraph import BrowseGraphWidget
 
 # --------------------------
 # added for tests
@@ -17,8 +18,9 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         self._init_status_bar()
 
         # по умолчанию главное окно находится в режиме обзора системы
-        browse_system_widget = BrowseObjectWidget()
-        self.setCentralWidget(browse_system_widget)
+        #browse_system_widget = BrowseObjectWidget()
+        browse_graph_widget = BrowseGraphWidget()
+        self.setCentralWidget(browse_graph_widget)
 
     def _init_toolbar_icons(self):
         self._icons = {
@@ -33,7 +35,6 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         toolbar.setMovable(False)
         toolbar.addAction(self._icons["browse_system"])
         toolbar.addAction(self._icons["browse_object"])
-        toolbar.addAction(self._icons["table"])
         toolbar.addAction(self._icons["browse_graph"])
         self.addToolBar(toolbar)
 

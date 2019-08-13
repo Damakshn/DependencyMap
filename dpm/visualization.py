@@ -13,12 +13,12 @@ def get_config():
 	# markers here https://matplotlib.org/3.1.0/api/markers_api.html#module-matplotlib.markers
 	return {
 		"nodes": {
-			"Database":          {"node_size": 1600, "node_color": "#FFFF00", "node_shape": "*", "linewidths": 3.5, "edgecolors": "#FFD700"}, # золотая звезда
-			"Application":       {"node_size": 1600, "node_color": "#00BFFF", "node_shape": "p", "linewidths": 2.5, "edgecolors": "#00008B"}, # синий пятиугольник 
-			"Form":              {"node_size": 300,  "node_color": "#FF4500", "node_shape": "s", "linewidths": 0.5, "edgecolors": "#000000"}, # оранжевый квадрат
-			"ClientQuery":       {"node_size": 50,   "node_color": "#FF4500", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#00BFFF"}, # оранжевый ромб
-			"DBTrigger":         {"node_size": 50,   "node_color": "#FF0000", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#DC143C"}, # красный ромб
-			"DBStoredProcedure": {"node_size": 50,   "node_color": "#00BFFF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#0000FF"}, # гобубой ромб
+			"Database":          {"node_size": 1600, "node_color": "#FFFF00", "node_shape": "*", "linewidths": 3.5, "edgecolors": "#FFD700"},
+			"Application":       {"node_size": 1600, "node_color": "#00BFFF", "node_shape": "p", "linewidths": 2.5, "edgecolors": "#00008B"},
+			"Form":              {"node_size": 300,  "node_color": "#FF4500", "node_shape": "s", "linewidths": 0.5, "edgecolors": "#000000"},
+			"ClientQuery":       {"node_size": 50,   "node_color": "#FF4500", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#00BFFF"},
+			"DBTrigger":         {"node_size": 50,   "node_color": "#FF0000", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#DC143C"},
+			"DBStoredProcedure": {"node_size": 50,   "node_color": "#00BFFF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#0000FF"},
 			"DBView":            {"node_size": 50,   "node_color": "#32CD32", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#000000"},
 			"DBTableFunction":   {"node_size": 50,   "node_color": "#A0522D", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#000000"},
 			"DBScalarFunction":  {"node_size": 50,   "node_color": "#FF00FF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#000000"},

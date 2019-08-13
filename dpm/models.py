@@ -389,6 +389,12 @@ class Form(Node):
         Возвращает подпись, которую будет иметь нода при обработке графа.
         """
         return self.alias
+    
+    @property
+    def categories(self):
+        return [
+            {"name": "Компоненты", "dataset": list(self.components.values())}
+        ]
 
     def __repr__(self):
         return self.name
@@ -432,6 +438,12 @@ class Application(Node):
 
     def __repr__(self):
         return self.name
+    
+    @property
+    def categories(self):
+        return [
+            {"name": "Формы", "dataset": list(self.forms.values())}
+        ]
 
 
 class DBScript(DatabaseObject, SQLQueryMixin):
@@ -716,6 +728,16 @@ class Database(Node):
     __mapper_args__ = {
         "polymorphic_identity": "База данных"
     }
+
+    @property
+    def categories(self):
+        return [
+            {"name": "Таблицы", "dataset": list(self.tables.values())},
+            {"name": "Процедуры", "dataset": list(self.procedures.values())},
+            {"name": "Представления", "dataset": list(self.views.values())},
+            {"name": "Скалярные функции", "dataset": list(self.scalar_functions.values())},
+            {"name": "Табличные функции", "dataset": list(self.table_functions.values())}
+        ]
 
     def __repr__(self):
         return self.name
