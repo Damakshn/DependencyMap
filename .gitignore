@@ -6,3 +6,5 @@ term.json
 *.sqlite
 pswd_dpm.txt
 *.log
+*.png
+*.jpg

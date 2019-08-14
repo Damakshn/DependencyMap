@@ -12,6 +12,7 @@ class DpmMainWindow(QtWidgets.QMainWindow):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self._icons = {}
+        self.setWindowIcon(QtGui.QIcon("assets/system48.jpg"))
         self._init_toolbar_icons()
         self._init_toolbar()
         self._init_main_menu()

@@ -3,6 +3,7 @@ from PySide2 import QtWidgets, QtGui
 
 icons_for_nodes = {}
 
+
 class BrowseGraphWidget(QtWidgets.QWidget):
     """
     Большой виджет, отвечающий за работу с графом зависимостей.
@@ -11,7 +12,7 @@ class BrowseGraphWidget(QtWidgets.QWidget):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
 
-        self.current_history_pos = None
+        self.current_history_pos = 0
         self.pov_history = []
 
         grid = QtWidgets.QGridLayout()
@@ -23,25 +24,22 @@ class BrowseGraphWidget(QtWidgets.QWidget):
         self._init_control_panel()
 
     def _init_draw_area(self):
-        # ToDo пока используем болванку
         self.draw_area = QtWidgets.QWidget()
         self.draw_area.setStyleSheet("background-color: #FFFFE0;")
         self.layout().addWidget(self.draw_area, 0, 0)
-        # 
 
     def _init_control_panel(self):
         # Панель управления отображением графа и содержащая список объектов.
         self.control_panel = QtWidgets.QWidget()
         self.control_panel.setLayout(QtWidgets.QVBoxLayout())
-        # widgets for control_panel
+        # виджеты панели управления
         self._init_pov_panel()
         self._init_dependencies_panel()
         self._init_list_control_panel()
         self._init_node_list()
 
-
         self.layout().addWidget(self.control_panel, 0, 1)
-    
+
     def _init_pov_panel(self):
         # панель для вывода точки отсчёта (point of view)
         # и перехода между точками отсчёта вперёд-назад
@@ -77,11 +75,12 @@ class BrowseGraphWidget(QtWidgets.QWidget):
         self.pov_last = QtWidgets.QPushButton()
         self.pov_last.setIcon(QtGui.QPixmap("assets/end32.png"))
         grid.addWidget(self.pov_last, 0, 5)
-        """
-        ToDo
-            signals:
-                pov_first/pov_back/pov_forward/pov_last.clecked.connect(...)
-        """
+
+        self.pov_first.clicked.connect(lambda: self._change_pov(self.pov_first))
+        self.pov_back.clicked.connect(lambda: self._change_pov(self.pov_back))
+        self.pov_forward.clicked.connect(lambda: self._change_pov(self.pov_forward))
+        self.pov_last.clicked.connect(lambda: self._change_pov(self.pov_last))
+
         groupbox = QtWidgets.QGroupBox("Точка отсчёта")
         groupbox.setLayout(grid)
         groupbox.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
@@ -97,25 +96,28 @@ class BrowseGraphWidget(QtWidgets.QWidget):
 
         lb_up = QtWidgets.QLabel("Вверх")
         lb_down = QtWidgets.QLabel("Вниз")
-        spb_up = QtWidgets.QSpinBox()
-        spb_down = QtWidgets.QSpinBox()
+        self.spb_up = QtWidgets.QSpinBox()
+        self.spb_down = QtWidgets.QSpinBox()
+        self.spb_up.setRange(0, 100)
+        self.spb_down.setRange(0, 100)
 
-        spb_up.setValue(0)
-        spb_down.setValue(3)
+        self.spb_up.setValue(0)
+        self.spb_down.setValue(3)
 
-        chb_up = QtWidgets.QCheckBox("До конца")
-        chb_down = QtWidgets.QCheckBox("До конца")
+        self.chb_up = QtWidgets.QCheckBox("До конца")
+        self.chb_down = QtWidgets.QCheckBox("До конца")
 
-        bt_load = QtWidgets.QPushButton("Загрузить")
+        self.bt_load = QtWidgets.QPushButton("Загрузить")
+        self.bt_load.clicked.connect(self._reload_dependencies)
 
         grid.addWidget(lb_up, 0, 0)
-        grid.addWidget(spb_up, 0, 1)
-        grid.addWidget(chb_up, 0, 2)
+        grid.addWidget(self.spb_up, 0, 1)
+        grid.addWidget(self.chb_up, 0, 2)
 
         grid.addWidget(lb_down, 1, 0)
-        grid.addWidget(spb_down, 1, 1)
-        grid.addWidget(chb_down, 1, 2)
-        grid.addWidget(bt_load, 0, 3, 2, 1)
+        grid.addWidget(self.spb_down, 1, 1)
+        grid.addWidget(self.chb_down, 1, 2)
+        grid.addWidget(self.bt_load, 0, 3, 2, 1)
         panel = QtWidgets.QWidget()
         panel.setLayout(grid)
         panel.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
@@ -124,27 +126,23 @@ class BrowseGraphWidget(QtWidgets.QWidget):
     def _init_list_control_panel(self):
         # панель управления списком объектов (поиск и группировка)
         lb_search = QtWidgets.QLabel("Поиск:")
-        le_search = QtWidgets.QLineEdit()
-        chb_grouping = QtWidgets.QCheckBox("Группировка")
-        """
-        ToDo
-            signals:
-                chb_grouping.stateChanged.connect(...) - переключение группировки
-                le_search.returnPressed.connect(...) - включение поиска
-        """
+        self.le_search = QtWidgets.QLineEdit()
+        self.le_search.returnPressed.connect(self._search_node_in_list)
+        self.chb_grouping = QtWidgets.QCheckBox("Группировка")
+        self.chb_grouping.stateChanged.connect(self._toggle_grouping)
+
         grid = QtWidgets.QGridLayout()
         grid.setColumnStretch(0, 1)
         grid.setColumnStretch(1, 5)
 
         grid.addWidget(lb_search, 0, 0)
-        grid.addWidget(le_search, 0, 1)
-        grid.addWidget(chb_grouping, 1, 0, 1, 2)
+        grid.addWidget(self.le_search, 0, 1)
+        grid.addWidget(self.chb_grouping, 1, 0, 1, 2)
 
         panel = QtWidgets.QWidget()
         panel.setLayout(grid)
         panel.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
         self.control_panel.layout().addWidget(panel)
-
 
     def _init_node_list(self):
         # список вершин графа
@@ -159,24 +157,30 @@ class BrowseGraphWidget(QtWidgets.QWidget):
         node_list.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.MinimumExpanding)
         self.control_panel.layout().addWidget(node_list)
 
-    def load_data(self, first_pov):
+    def load_data(self, first_pov_id):
         """
         Инициализирует данные виджета.
         """
-        pass
-    
+        print("load data")
+        # todo delete later, when proper graph will be prepared
+        self.pov_history.append({})
+        self._disable_pov_navigation_buttons()
+        self._reload_dependencies()
+
     def _reload_dependencies(self):
-        pass
-    
+        print("reload dependencies")
+        self._draw_current_graph()
+
     def _draw_current_graph(self):
-        pass
+        print("draw current graph")
 
     def _read_graph_from_history(self):
         """
         Читает граф из текущей позиции в истории, заполняет значения виджетов значениями
         из атрибутов графа и выводит граф в области для отображения.
         """
-        pass
+        print("read graph from history")
+        self._draw_current_graph()
 
     def _change_pov(self, button):
         """
@@ -185,7 +189,40 @@ class BrowseGraphWidget(QtWidgets.QWidget):
         если достигнуто начало истории просмотров, то кнопки "в начало" и "назад" выключаются, если 
         достигнут конец, то выключаются кнопки "Вперёд" и "в конец".
         """
-        pass
+        print("change pov via button")
+        if button == self.pov_first:
+            self.current_history_pos = 0
+        elif button == self.pov_back:
+            self.current_history_pos -= 1
+        elif button == self.pov_forward:
+            self.current_history_pos += 1
+        elif button == self.pov_last:
+            self.current_history_pos = (len(self.pov_history) - 1)
+
+        self._disable_pov_navigation_buttons()
+
+        self._read_graph_from_history()
+
+    def _disable_pov_navigation_buttons(self):
+        print("disable pov navigation buttons")
+        not_begin = (self.current_history_pos != 0)
+        not_end = (self.current_history_pos != (len(self.pov_history) - 1))
+        self.pov_first.setEnabled(not_begin)
+        self.pov_back.setEnabled(not_begin)
+        self.pov_forward.setEnabled(not_end)
+        self.pov_last.setEnabled(not_end)
+
+    def _toggle_grouping(self):
+        print(f"toggle grouping {self.chb_grouping.isChecked()}")
+
+    def _search_node_in_list(self):
+        print(f"search for {self.le_search.text()}")
+
+    def _make_new_pov(self, node_id):
+        print(f"make new pov {node_id}")
+        self.current_history_pos += 1
+        self._read_graph_from_history()
+        self._disable_pov_navigation_buttons()
 
 
 class TableNodeList(QtWidgets.QTableView):
@@ -213,3 +250,11 @@ class NodeContextMenu(QtWidgets.QMenu):
     Контекстное меню объекта (ноды графа)
     """
     pass
+
+
+def convert_graph_to_table_model(graph):
+    return None
+
+
+def convert_graph_to_tree_model(graph):
+    return None
