@@ -152,10 +152,27 @@ class BrowseGraphWidget(QtWidgets.QWidget):
         TBD виджет со списком как контейнер, в него кладётся конкретное представление?
         При включении группировки ставится дерево, при отключении - таблица
         """
-        node_list = QtWidgets.QWidget()
-        node_list.setStyleSheet("background-color: #FFFFE0;")
-        node_list.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.MinimumExpanding)
-        self.control_panel.layout().addWidget(node_list)
+        # черновой вариант
+        tree_model = QtGui.QStandardItemModel()
+        root_item = tree_model.invisibleRootItem()
+
+        item_up = QtGui.QStandardItem("Вверх")
+        item_down = QtGui.QStandardItem("Вниз")
+        root_item.appendRow(item_up)
+        root_item.appendRow(item_down)
+
+        for i in range(3):
+            # без дублирования нельзя, иначе добавится только в одно место
+            new_item1 = QtGui.QStandardItem(f"{i+1}")
+            new_item2 = QtGui.QStandardItem(f"{i+4}")
+            item_up.appendRow(new_item1)
+            item_down.appendRow(new_item2)
+
+        tree_view = QtWidgets.QTreeView()
+        tree_view.setModel(tree_model)
+        tree_view.header().hide()
+        
+        self.control_panel.layout().addWidget(tree_view)
 
     def load_data(self, first_pov_id):
         """
