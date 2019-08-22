@@ -1,6 +1,7 @@
 import networkx as nx
 import dpm.models as models
 import itertools
+from node_storage import NodeStorage
 
 """
 Этот модуль запрашивает информацию о зависимостях объектов из базы и формирует
@@ -23,114 +24,16 @@ import itertools
 """
 
 
-def build_graph_in_depth(node):
-    """
-    Строит граф объектов, от которых зависит заданный объект, рекурсивно копая вглубь.
-    """
-    G = nx.MultiDiGraph()
-    fill_graph_in_depth(G, node)
-    return G
-
-def fill_graph_in_depth(G, parent_node):
-    G.add_node(parent_node.id, label=parent_node.label, node_class=parent_node.__class__.__name__, id=parent_node.id)
-    # используем по отдельности поля scalar_functions, procedures и др. вместо scripts
-    # так как оно включает в себя триггеры, а их мы подберём, строя графы для таблиц
-    if isinstance(parent_node, models.Database):
-        for obj in itertools.chain(
-            parent_node.tables.values(),
-            parent_node.scalar_functions.values(),
-            parent_node.table_functions.values(),
-            parent_node.procedures.values(),
-            parent_node.views.values()
-        ):
-            connect_deeper_node(G, parent_node, obj, "contain")
-    elif isinstance(parent_node, models.Application):
-        for form in parent_node.forms.values():
-            connect_deeper_node(G, parent_node, form, "contain")
-    elif isinstance(parent_node, models.Form):
-        for component in parent_node.components.values():
-           connect_deeper_node(G, parent_node, component, "contain")
-    elif isinstance(parent_node, models.DBTable):
-        for trigger in parent_node.triggers.values():
-            connect_deeper_node(G, parent_node, trigger, "contain")
-    else:
-        edge_template = ["calc", "select", "insert", "update", "delete", "exec", "drop", "truncate"]
-        for e in parent_node.edges_out:
-            # защита от рекурсивных вызовов скалярных функций, где ребро графа циклическое
-            if e.sourse.id == e.dest.id:
-                continue
-            # защита от зацикливания на триггерах
-            if isinstance(e.sourse, models.DBTrigger) and e.sourse.table_id == e.dest_id:
-                continue
-            connect_deeper_node(G, parent_node, e.dest, *[attr for attr in edge_template if getattr(e,attr,False) == True])
-
-def build_graph_up(node):
-    """
-    Строит граф объектов, зависимых от заданного, рекурсивно двигаясь вверх по иерархии объектов (изнутри наружу).
-    """
-    G = nx.MultiDiGraph()
-    fill_graph_up(G, node)
-    return G
-
-def fill_graph_up(G, child_node):
-    G.add_node(child_node.id, label=child_node.label, node_class=child_node.__class__.__name__, id=child_node.id)
-    if isinstance(child_node, models.Database) or isinstance(child_node, models.Application):
-        return
-    elif isinstance(child_node, models.Form):
-        for app in child_node.applications:
-            G.add_node(app.id, label=app.label, node_class=app.__class__.__name__, id=app.id)
-            G.add_edge(app.id, child_node.id, contain=True)
-    elif isinstance(child_node, models.ClientQuery):
-        connect_upper_node(G, child_node, child_node.form, "contain")
-    else:
-        edge_template = ["calc", "select", "insert", "update", "delete", "exec", "drop", "truncate"]
-        for e in child_node.edges_in:
-            # защита от рекурсивных вызовов, где ребро графа циклическое
-            if e.sourse.id == e.dest.id:
-                continue
-            connect_upper_node(G, child_node, e.sourse, *[attr for attr in edge_template if getattr(e,attr,False) == True])
-
-def build_full_graph(node):
-    G1 = build_graph_up(node)
-    G2 = build_graph_in_depth(node)
-    G1.add_nodes_from(G2.nodes(data=True))
-    G1.add_edges_from(G2.edges(data=True))
-    return G1
-
-def connect_deeper_node(G, sourse, dest, *edge_attrs):
-    # закапывается в зависимости очередной вершины и соединяет её рёбрами
-    # с родительской вершиной в графе
-
-    # защита от бесконечной рекурсии
-    # закапываемся в зависимости вершины только тогда, когда её ещё нет в графе
-    if not dest.id in G:
-        fill_graph_in_depth(G, dest)
-    # создаём по ребру от sourse к dest для каждой операции в edge_attrs
-    for attr in edge_attrs:
-        G.add_edge(sourse.id, dest.id, **{attr: True})
-
-def connect_upper_node(G, dest, sourse, *edge_attrs):
-    # выкапывается от очередной вершины вверх по иерархии и соединяет её рёбрами
-    # с вершиной-потомком в графе
-
-    # защита от бесконечной рекурсии
-    # закапываемся в зависимости вершины только тогда, когда её ещё нет в графе
-    if not sourse.id in G:
-        fill_graph_up(G, sourse)
-
-    for attr in edge_attrs:
-        G.add_edge(sourse.id, dest.id, **{attr: True})
-
-
 class DpmGraph:
 
     # TBD как быть, если требуется загрузить зависимости вниз на 6 уровней,
     # а существует всего 5, тогда в атрибутах графа проставится 6, а по факту глубина
     # будет меньше
 
-    def __init__(self, nx_graph, pov_id):
+    def __init__(self, storage, nx_graph, pov_node):
+        self.storage = storage
         self.nx_graph = nx_graph
-        self.pov_id = pov_id
+        self.pov_id = pov_node.id
         self.levels_up = 0
         self.levels_down = 0
 
@@ -176,32 +79,32 @@ class DpmGraph:
         Удаляет вершины, длина кратчайшего пути от которых к POV превышает limit.
         """
         length = dict(nx.single_target_shortest_path_length(self.nx_graph, self.pov_id))
-        for node in length:
-            if length[node] > limit:
-                self.nx_graph.remove(node)
+        for node_id in length:
+            if length[node_id] > limit:
+                self.nx_graph.remove(node_id)
 
     def _cut_lower_levels(self, limit):
         """
         Удаляет вершины, длина кратчайшего пути от POV к которым превышает limit.
         """
         length = nx.single_source_shortest_path_length(self.nx_graph, self.pov_id)
-        for node in length:
-            if length[node] > limit:
-                self.nx_graph.remove(node)
+        for node_id in length:
+            if length[node_id] > limit:
+                self.nx_graph.remove(node_id)
 
     def _load_dependencies_up(self, levels_counter):
         """
         Подгружает связи в графе на levels_counter уровней вверх.
         """
-        # ищем вершины графа, максимально удалённые от pov на данный момент
+        # ищем крайние вершины графа
         upper_periphery = set()
         length = dict(nx.single_target_shortest_path_length(self.nx_graph, self.pov_id))
-        for node in length:
-            if length[node] == self.levels_up:
-                upper_periphery.add(node)
+        for node_id in length:
+            if length[node_id] == self.levels_up:
+                upper_periphery.add(node_id)
         # используем набор крайних вершин как отправную точку для поиска
         while upper_periphery:
-            next_node = upper_periphery.pop()
+            next_node = self.storage.get_node_by_id(upper_periphery.pop())
             self._explore_upper_nodes(next_node, levels_counter)
 
     def _load_dependencies_down(self, levels_counter):
@@ -211,38 +114,51 @@ class DpmGraph:
         # ищем вершины графа, максимально удалённые от pov на данный момент
         bottom_periphery = set()
         length = nx.single_source_shortest_path_length(self.nx_graph, self.pov_id)
-        for node in length:
-            if length[node] == self.levels_down:
-                bottom_periphery.add(node)
+        for node_id in length:
+            if length[node_id] == self.levels_down:
+                bottom_periphery.add(node_id)
         # используем набор крайних вершин как отправную точку для поиска
         while bottom_periphery:
-            next_node = bottom_periphery.pop()
+            next_node = self.storage.get_node_by_id(bottom_periphery.pop())
+            # ToDo можно привести id к объекту где-то здесь
             self._explore_lower_nodes(next_node, levels_counter)
 
     def _explore_lower_nodes(self, node, levels_counter):
         """
         Закапывается на levels_counter уровней вглубь зависимостей указанной вершины.
         """
-        # ToDo в отличие от старой версии, node - это id вершины, а не orm-моделька
-        # как будем определять тип? передаём в объект сессию? приделываем к каждой ноде модельку?
+        for child, edge_attrs in node.get_children():
+            # если новая вершина ещё не добавлена в граф, то добавляем её id в граф и прописываем все атрибуты
+            if child.id not in self.nx_graph:
+                self._add_nx_node_from_model(child)
+                # если нужно углубиться ещё на несколько уровней
+                if levels_counter > 1:
+                    self._explore_lower_nodes(child, levels_counter-1)
+            # присоединяем дочернюю вершину к родительской, создавая ребро графа для каждой операции
+            for attr in edge_attrs:
+                self.nx_graph.add_edge(node.id, child.id, **{attr: True})
 
-        # [добываем выше/нижележащие вершины, действуя в зависимости от типа текущей вершины] см. fill_graph_in_depth
-        # если новая вершина ещё не добавлена в граф, то добавляем её id в граф и прописываем все атрибуты
-		# присоединяем эти вершины к данной, опираясь на тип связи
-		# если levels_counter > 1:
-		# для каждой вершины выполняем данный метод, уменьшив levels_counter на 1
-        pass
-    
     def _explore_upper_nodes(self, node, levels_counter):
         """
-        Поднимается на levels_counter уровней вверх по зависимостям указанной вершины.
+        Закапывается на levels_counter уровней вверх по зависимостям указанной вершины.
         """
-        # [добываем выше/нижележащие вершины, действуя в зависимости от типа текущей вершины] см. fill_graph_up
-        # если новая вершина ещё не добавлена в граф, то добавляем её id в граф и прописываем все атрибуты
-		# присоединяем эти вершины к данной, опираясь на тип связи, 
-		# если levels_counter > 1:
-		# для каждой вершины выполняем данный метод, уменьшив levels_counter на 1
-        pass
+        for parent, edge_attrs in node.get_parents():
+            # если новая вершина ещё не добавлена в граф, то добавляем её id в граф и прописываем все атрибуты
+            if parent.id not in self.nx_graph:
+                self._add_nx_node_from_model(parent)
+                # если нужно углубиться ещё на несколько уровней
+                if levels_counter > 1:
+                    self._explore_upper_nodes(parent, levels_counter-1)
+            # присоединяем родительскую вершину к дочерней, создавая ребро графа для каждой операции
+            for attr in edge_attrs:
+                self.nx_graph.add_edge(parent.id, node.id, **{attr: True})
+    
+    def _add_nx_node_from_model(self, model):
+        """
+        Добавляет в граф новую вершину, беря данные из её orm-модели.
+        Поскольку набор атрибутов вершин может меняться, эта операция вынесена в отдельный метод.
+        """
+        self.nx_graph.add_node(model.id, label=model.label, node_class=model.__class__.__name__, id=model.id)
 
     def _recalc(self):
         pass

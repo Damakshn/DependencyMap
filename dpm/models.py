@@ -4,6 +4,7 @@ from sqlalchemy.orm import deferred, relationship
 from sqlalchemy.orm.collections import attribute_mapped_collection
 from sqlalchemy.schema import Table
 import datetime
+import itertools
 
 BaseDPM = declarative_base()
 
@@ -69,6 +70,12 @@ class Node(BaseDPM):
         Возвращает подпись, которую будет иметь нода при обработке графа.
         """
         return self.name
+    
+    def get_children(self):
+        return []
+    
+    def get_parents(self):
+        return []
 
 
 class Edge(BaseDPM):
@@ -104,8 +111,6 @@ class Edge(BaseDPM):
     exec = Column(Boolean, default=False, nullable=False)
     truncate = Column(Boolean, default=False, nullable=False)
     drop = Column(Boolean, default=False, nullable=False)
-    
-    
 
     def __repr__(self):
         if isinstance(self.sourse, DBScript):
@@ -118,6 +123,10 @@ class Edge(BaseDPM):
         else:
             dest_node_name = self.dest.name
         return f"{sourse_node_name} -> {dest_node_name}"
+    
+    def get_attributes_list(self):
+        template = ["calc", "select", "insert", "update", "delete", "exec", "drop", "truncate"]
+        return [attr for attr in template if getattr(self,attr,False) == True]
 
 """
 добавляем классу Node зависимости от Edge
@@ -321,6 +330,15 @@ class ClientQuery(Node, SQLQueryMixin):
 
     def __repr__(self):
         return f"{self.name}: {self.component_type} "
+    
+    def get_children(self):
+        children = []
+        for e in self.edges_out:
+            children.append((e.dest, e.get_attributes_list()))
+        return children
+    
+    def get_parents(self):
+        return [(self.form, ["contain"])]
 
 AppsAndForms = Table('AppsAndForms', BaseDPM.metadata,
     Column('form_id', Integer, ForeignKey('Form.id')),
@@ -399,6 +417,18 @@ class Form(Node):
     def __repr__(self):
         return self.name
 
+    def get_children(self):
+        children = []
+        for component in self.components.values():
+            children.append((component, ["contain"]))
+        return children
+
+    def get_parents(self):
+        parents = []
+        for app in self.applications:
+            parents.append((app, ["contain"]))
+        return parents
+
 class Application(Node):
     """
     Клиентское приложение, написанное на Delphi.
@@ -444,6 +474,15 @@ class Application(Node):
         return [
             {"name": "Формы", "dataset": list(self.forms.values())}
         ]
+    
+    def get_children(self):
+        children = []
+        for form in self.forms.values():
+            children.append((form, ["contain"]))
+        return children
+    
+    def get_parents(self):
+        return []
 
 
 class DBScript(DatabaseObject, SQLQueryMixin):
@@ -492,6 +531,24 @@ class DBScript(DatabaseObject, SQLQueryMixin):
         при его использовании в sql-коде.
         """
         return []
+    
+    def get_children(self):
+        children = []
+        for e in self.edges_out:
+            # защита от рекурсивных вызовов, где ребро графа циклическое
+            if e.sourse.id == e.dest.id:
+                continue
+            children.append((e.dest, e.get_attributes_list()))
+        return children
+
+    def get_parents(self):
+        parents = []
+        for e in self.edges_in:
+            # защита от рекурсивных вызовов, где ребро графа циклическое
+            if e.sourse.id == e.dest.id:
+                continue
+            parents.append((e.sourse, e.get_attributes_list()))
+        return parents
 
 
 class DBView(DBScript):
@@ -618,15 +675,25 @@ class DBTrigger(DBScript):
             table=parent,
             database=parent.database
         )
-    
+
     @property
     def sql_actions(self):
         """
         Обращений к триггеру не бывает.
         """
         return []
-    
 
+    def get_children(self):
+        children = []
+        for e in self.edges_out:
+            # защита от зацикливания, когда триггер обращается к своей же таблице
+            if self.table_id == e.dest.id:
+                continue
+            children.append((e.dest, e.get_attributes_list()))
+        return children
+
+    def get_parents(self):
+        return [(self.table, ["contain"])]
 
 
 class DBTable(DatabaseObject):
@@ -668,6 +735,18 @@ class DBTable(DatabaseObject):
         при обращении к ней в sql-коде.
         """
         return ["select", "update", "insert", "delete", "truncate", "drop"]
+
+    def get_children(self):
+        children = []
+        for trigger in self.triggers.values():
+            children.append((trigger, ["contain"]))
+        return children
+
+    def get_parents(self):
+        parents = []
+        for e in self.edges_in:
+            parents.append((e.sourse, e.get_attributes_list()))
+        return parents
 
 
 class Database(Node):
@@ -741,3 +820,20 @@ class Database(Node):
 
     def __repr__(self):
         return self.name
+
+    def get_children(self):
+        children = []
+        # используем по отдельности поля scalar_functions, procedures и др. вместо scripts
+        # так как оно включает в себя триггеры, а их мы подберём, строя графы для таблиц
+        for item in itertools.chain(
+            self.tables.values(),
+            self.scalar_functions.values(),
+            self.table_functions.values(),
+            self.procedures.values(),
+            self.views.values()
+        ):
+            children.append((item, ["contain"]))
+        return children
+
+    def get_parents(self):
+        return []
