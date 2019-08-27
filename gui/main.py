@@ -18,12 +18,32 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         self._init_toolbar()
         self._init_main_menu()
         self._init_status_bar()
+        self._container = QtWidgets.QStackedWidget()
         self._browse_system_widget = BrowseObjectWidget()
-        self._browse_object_widget = None
-        self._browse_graph_widget = None # BrowseGraphWidget()
+        self._browse_object_widget = BrowseObjectWidget() # ToDo non identic widgets
+        self._browse_graph_widget = BrowseGraphWidget()
+        for widget in self._browse_widgets():
+            self._container.addWidget(widget)
+        self._container.currentChanged.connect(
+            lambda: self._browse_widget_changed(self._container.currentIndex())
+        )
+        self.setCentralWidget(self._container)
 
         # по умолчанию главное окно находится в режиме обзора системы
-        self. _switch_to_system()
+        self._switch_to_system()
+        self._browse_widget_changed(self._container.indexOf(self._browse_system_widget))
+
+        self._selected_node = None
+
+    def _browse_widgets(self):
+        """
+        Возвращает список обзорных виджетов.
+        """
+        return [
+            self._browse_system_widget,
+            self._browse_object_widget,
+            self._browse_graph_widget
+        ]
 
     def _init_icons(self):
         self._icons = {
@@ -45,39 +65,43 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         self._actions["browse_graph"].triggered.connect(self._switch_to_graph)
 
     def _switch_to_system(self):
-        # TBD RuntimeError: Internal C++ object (BrowseObjectWidget) already deleted
-        # ToDo see https://doc.qt.io/archives/qt-4.8/qstackedwidget.html and dont use setCentralWidget
-        if self._browse_system_widget is None:
-            self._browse_system_widget = BrowseObjectWidget()
-        self.setCentralWidget(self._browse_system_widget)
-
-        self._actions["browse_system"].setEnabled(False)
-        self._actions["browse_object"].setEnabled(True)
-        self._actions["browse_graph"].setEnabled(True)
+        """
+        Включает режим обзора системы
+        """
+        index = self._container.indexOf(self._browse_system_widget)
+        self._container.setCurrentIndex(index)
 
     def _switch_to_object(self):
         """
-        if self._browse_object_widget is None:
-            self._browse_object_widget = 
+        Включает режим обзора объекта.
         """
-        self._actions["browse_system"].setEnabled(True)
-        self._actions["browse_object"].setEnabled(False)
-        self._actions["browse_graph"].setEnabled(True)
-        QtWidgets.QMessageBox.about(self, settings.PROJECT_NAME, "Обзор объекта")
+        # ToDo self._selected_object needed to activate browse widget
+        index = self._container.indexOf(self._browse_object_widget)
+        self._container.setCurrentIndex(index)
 
     def _switch_to_graph(self):
-        if self._browse_graph_widget is None:
-            self._browse_graph_widget = BrowseGraphWidget()
-        self.setCentralWidget(self._browse_graph_widget)
+        """
+        Включает режим просмотра графа зависимостей.
+        """
+        index = self._container.indexOf(self._browse_graph_widget)
+        self._container.setCurrentIndex(index)
 
-        self._actions["browse_system"].setEnabled(True)
-        self._actions["browse_object"].setEnabled(True)
-        self._actions["browse_graph"].setEnabled(False)
-
-        QtWidgets.QMessageBox.about(self, settings.PROJECT_NAME, "Обзор графа")
+    def _browse_widget_changed(self, index):
+        """
+        Прячет кнопки режимов просмотра в зависимости от того, какой
+        из виджетов сейчас активен.
+        """
+        self._actions["browse_system"].setEnabled(
+            index != self._container.indexOf(self._browse_system_widget)
+        )
+        self._actions["browse_object"].setEnabled(
+            index != self._container.indexOf(self._browse_object_widget)
+        )
+        self._actions["browse_graph"].setEnabled(
+            index != self._container.indexOf(self._browse_graph_widget)
+        )
 
     def _init_toolbar(self):
-        # ToDo тулбар должен реагировать на смену центрального виджета и на смену выбранного объекта в нём
         toolbar = QtWidgets.QToolBar(self)
         toolbar.setMovable(False)
         toolbar.addAction(self._actions["browse_system"])
@@ -91,12 +115,26 @@ class DpmMainWindow(QtWidgets.QMainWindow):
     def _init_status_bar(self):
         # реагирует на смену центрального виджета и на некоторые другие события
         pass
-    
+
     def set_session(self, session):
-        self.session = session
+        self._session = session
+        for widget in self._browse_widgets():
+            widget.set_session(self._session)
 
     def load_data(self, dataset):
         self.centralWidget().load_data(dataset)
+
+    def query_system_data(self):
+        """
+        Запрашивает данные для обзора всей системы.
+        """
+        # не идёт дальше, если не задана сессия или
+        # активен виджет, отличный от виджета обзора системы
+        if getattr(self, "_session") is None:
+            return
+        if self._container.currentIndex() != self._container.indexOf(self._browse_system_widget):
+            return
+        self._browse_system_widget.query_system_data()
 
 
 def init_gui(session):
@@ -108,18 +146,7 @@ def init_gui(session):
     # функциональность по работе с бд должна быть вытащена вовне
     main_window = DpmMainWindow()
     main_window.set_session(session)
-    dataset = [
-        {"name": "АРМы", "dataset": []},
-        {"name": "Базы данных", "dataset": []}
-    ]
-    # ToDo надо как-то отделить интерфейс от всего этого
-    """
-    from dpm.graphsworks import DpmGraph
-    from dpm.models import Node
-    test_pov_node = session.query(Node).filter(Node.id == 2).one()
-    test_graph = DpmGraph(session, test_pov_node)
-    main_window.load_data(dataset=test_graph)
-    """
+    main_window.query_system_data()
     main_window.showMaximized()
     sys.exit(app.exec_())
     return main_window

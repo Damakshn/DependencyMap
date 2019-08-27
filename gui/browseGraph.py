@@ -1,10 +1,13 @@
 from PySide2 import QtWidgets, QtGui
-
+import matplotlib.pyplot as plt
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from .browse_widget import BrowseWidget
 
 icons_for_nodes = {}
 
 
-class BrowseGraphWidget(QtWidgets.QWidget):
+class BrowseGraphWidget(BrowseWidget):
     """
     Большой виджет, отвечающий за работу с графом зависимостей.
     """
@@ -24,7 +27,8 @@ class BrowseGraphWidget(QtWidgets.QWidget):
         self._init_control_panel()
 
     def _init_draw_area(self):
-        self.draw_area = QtWidgets.QWidget()
+        self.figure = plt.figure()
+        self.draw_area = FigureCanvas(self.figure)
         self.draw_area.setStyleSheet("background-color: #FFFFE0;")
         self.layout().addWidget(self.draw_area, 0, 0)
 
@@ -174,22 +178,30 @@ class BrowseGraphWidget(QtWidgets.QWidget):
         
         self.control_panel.layout().addWidget(tree_view)
 
-    def load_data(self, first_pov_id):
+    def load_data(self, graph):
         """
         Инициализирует данные виджета.
         """
-        print("load data")
         # todo delete later, when proper graph will be prepared
-        self.pov_history.append({})
+        self.pov_history.append({"graph": graph})
         self._disable_pov_navigation_buttons()
         self._reload_dependencies()
 
     def _reload_dependencies(self):
         print("reload dependencies")
+        levels_up = self.spb_up.value()
+        levels_down = self.spb_down.value()
+        self.pov_history[self.current_history_pos]["graph"].load_dependencies(levels_up=levels_up, levels_down=levels_down)
         self._draw_current_graph()
 
     def _draw_current_graph(self):
+        # ToDo разобраться, как работает визуализация, что откуда надо вызывать, что куда передавать, что для чего надо
         print("draw current graph")
+        self.figure.clf()
+        """
+        nx.draw(B, pos=pos, with_labels=True)
+        self.canvas.draw_idle()
+        """
 
     def _read_graph_from_history(self):
         """
