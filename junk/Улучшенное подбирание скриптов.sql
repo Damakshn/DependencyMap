@@ -1,7 +1,3 @@
-/*
-имеет дополнительную проверку - сломан скрипт или нет
-*/
-
 declare @tmp table (
 	name VARCHAR(500)
 	,last_update DATETIME

@@ -1,7 +1,5 @@
 import networkx as nx
-import dpm.models as models
-import itertools
-from node_storage import NodeStorage
+from .models import Node
 
 """
 Этот модуль запрашивает информацию о зависимостях объектов из базы и формирует
@@ -30,10 +28,14 @@ class DpmGraph:
     # а существует всего 5, тогда в атрибутах графа проставится 6, а по факту глубина
     # будет меньше
 
-    def __init__(self, storage, nx_graph, pov_node):
-        self.storage = storage
-        self.nx_graph = nx_graph
+    def __init__(self, session, pov_node, nx_graph=None):
+        self.session = session
         self.pov_id = pov_node.id
+        if nx_graph is None:
+            self.nx_graph = nx.MultiDiGraph()
+            self._add_nx_node_from_model(pov_node)
+        else:
+            self.nx_graph = nx_graph
         self.levels_up = 0
         self.levels_down = 0
 
@@ -69,6 +71,7 @@ class DpmGraph:
         elif levels_down < self.levels_down:
             self._cut_lower_levels(levels_down)
 
+        # TBD оставить так или пересчитать длины путей и сохранить фактическое значение?
         self.levels_up = levels_up
         self.levels_down = levels_down
 
@@ -103,9 +106,8 @@ class DpmGraph:
             if length[node_id] == self.levels_up:
                 upper_periphery.add(node_id)
         # используем набор крайних вершин как отправную точку для поиска
-        while upper_periphery:
-            next_node = self.storage.get_node_by_id(upper_periphery.pop())
-            self._explore_upper_nodes(next_node, levels_counter)
+        for node in self.session.query(Node).filter(Node.id.in_(upper_periphery)).all():
+            self._explore_upper_nodes(node, levels_counter)
 
     def _load_dependencies_down(self, levels_counter):
         """
@@ -118,10 +120,8 @@ class DpmGraph:
             if length[node_id] == self.levels_down:
                 bottom_periphery.add(node_id)
         # используем набор крайних вершин как отправную точку для поиска
-        while bottom_periphery:
-            next_node = self.storage.get_node_by_id(bottom_periphery.pop())
-            # ToDo можно привести id к объекту где-то здесь
-            self._explore_lower_nodes(next_node, levels_counter)
+        for node in self.session.query(Node).filter(Node.id.in_(bottom_periphery)).all():
+            self._explore_lower_nodes(node, levels_counter)
 
     def _explore_lower_nodes(self, node, levels_counter):
         """
@@ -152,13 +152,13 @@ class DpmGraph:
             # присоединяем родительскую вершину к дочерней, создавая ребро графа для каждой операции
             for attr in edge_attrs:
                 self.nx_graph.add_edge(parent.id, node.id, **{attr: True})
-    
+
     def _add_nx_node_from_model(self, model):
         """
         Добавляет в граф новую вершину, беря данные из её orm-модели.
         Поскольку набор атрибутов вершин может меняться, эта операция вынесена в отдельный метод.
         """
-        self.nx_graph.add_node(model.id, label=model.label, node_class=model.__class__.__name__, id=model.id)
+        self.nx_graph.add_node(model.id, label=model.label, node_class=model.__class__.__name__, id=model.id, hidden=False)
 
     def _recalc(self):
         pass

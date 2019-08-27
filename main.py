@@ -10,12 +10,19 @@ from sync.scan_db import scan_database
 from sync.scan_source import scan_application
 import dpm.visualization as viz
 import dpm.graphsworks as gw
+import settings
+from gui import init_gui
 
 
-path_to_config = "config.json"
+def create_gui_session(config):
+	connector = Connector(**config["connector"])
+	session = connector.connect_to_dpm()
+	return session
 
-def set_logger(logfile):
-	logging.basicConfig(filename=logfile, level=logging.DEBUG)
+def test_scan(config):
+	logging.info(f"Начинаем тестовую синхронизацию")
+	connector = Connector(**config["connector"])
+	prepare_test_sqlite_db(connector, config)
 
 
 def prepare_test_sqlite_db(connector, config):
@@ -25,19 +32,18 @@ def prepare_test_sqlite_db(connector, config):
 	test_db_name = config["databases"][0]
 	
 	# удаляем временную базу, если она осталась после предыдущего теста
-	#if os.path.exists(config["connector"]["host_dpm"][10:]):
-	#	os.remove(config["connector"]["host_dpm"][10:])
+	if os.path.exists(config["connector"]["host_dpm"][10:]):
+		os.remove(config["connector"]["host_dpm"][10:])
 	session = connector.connect_to_dpm()
-	"""
+	
 	logging.info(f"Соединяемся с базой {config['testdb']}")
 	try:
 		conn = connector.connect_to(config["testdb"])
-	except Exception as e:
+	except Exception:
 		logging.critical(f"Не удалось соединиться с БД {config['testdb']}; убедитесь, что у вас есть права для этого.")
 		exit()
 	
 	# создаём тестовый АРМ, чтобы синхронизировать его
-	d = datetime.datetime.now()
 	# создаём искусственную дату обновления, чтобы синхронизация сработала
 	la = datetime.datetime.fromtimestamp(
 		calendar.timegm((datetime.date.today() - datetime.timedelta(days=30)).timetuple())
@@ -57,24 +63,16 @@ def prepare_test_sqlite_db(connector, config):
 	scan_application(test_app, session)
 	logging.info(f"Обработка АРМа закончена")
 	session.commit()
-	"""
+	
 	# следующий этап - построение связей
-	#analize_links(session, conn)
-	#session.commit()
-		
-	viz.draw_graph(gw.build_graph_in_depth(session.query(models.Database).filter_by(name=test_db_name).one()))
-	
-	
+	analize_links(session, conn)
+	session.commit()
+
 
 def main():
-	config = read_config()
-	set_logger(config["logfile"])
-	logging.info(f"Начинаем тестовую синхронизацию")
-	connector = Connector(**config["connector"])
-	prepare_test_sqlite_db(connector, config)
+	config = settings.config
+	init_gui(create_gui_session(config))
 
-def read_config():
-	return json.load(open(path_to_config, "r", encoding="utf-8"))
 
 if __name__ == "__main__":
 	main()
