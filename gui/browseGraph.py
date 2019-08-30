@@ -3,9 +3,10 @@ import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from .browse_widget import BrowseWidget
+import os
+import settings
 
 icons_for_nodes = {}
-
 
 class BrowseGraphWidget(BrowseWidget):
     """
@@ -56,7 +57,7 @@ class BrowseGraphWidget(BrowseWidget):
         grid.setColumnStretch(5, 1)
         # иконка точки отсчёта
         self.pov_icon = QtWidgets.QLabel()
-        self.pov_icon.setPixmap(QtGui.QPixmap("assets/package.png"))
+        self.pov_icon.setPixmap(QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/package.jpg")))
         grid.addWidget(self.pov_icon, 0, 0)
         # имя точки отсчёта
         self.pov_label = QtWidgets.QLabel()
@@ -65,19 +66,19 @@ class BrowseGraphWidget(BrowseWidget):
         # стрелки
         # в начало
         self.pov_first = QtWidgets.QPushButton()
-        self.pov_first.setIcon(QtGui.QPixmap("assets/begin32.png"))
+        self.pov_first.setIcon(QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/begin32.png")))
         grid.addWidget(self.pov_first, 0, 2)
         # назад
         self.pov_back = QtWidgets.QPushButton()
-        self.pov_back.setIcon(QtGui.QPixmap("assets/back32.png"))
+        self.pov_back.setIcon(QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/back32.png")))
         grid.addWidget(self.pov_back, 0, 3)
         # вперёд
         self.pov_forward = QtWidgets.QPushButton()
-        self.pov_forward.setIcon(QtGui.QPixmap("assets/forward32.png"))
+        self.pov_forward.setIcon(QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/forward32.png")))
         grid.addWidget(self.pov_forward, 0, 4)
         # в конец
         self.pov_last = QtWidgets.QPushButton()
-        self.pov_last.setIcon(QtGui.QPixmap("assets/end32.png"))
+        self.pov_last.setIcon(QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/end32.png")))
         grid.addWidget(self.pov_last, 0, 5)
 
         self.pov_first.clicked.connect(lambda: self._change_pov(self.pov_first))
@@ -178,15 +179,6 @@ class BrowseGraphWidget(BrowseWidget):
         
         self.control_panel.layout().addWidget(tree_view)
 
-    def load_data(self, graph):
-        """
-        Инициализирует данные виджета.
-        """
-        # todo delete later, when proper graph will be prepared
-        self.pov_history.append({"graph": graph})
-        self._disable_pov_navigation_buttons()
-        self._reload_dependencies()
-
     def _reload_dependencies(self):
         print("reload dependencies")
         levels_up = self.spb_up.value()
@@ -252,6 +244,23 @@ class BrowseGraphWidget(BrowseWidget):
         self.current_history_pos += 1
         self._read_graph_from_history()
         self._disable_pov_navigation_buttons()
+    
+    # public methods
+    
+    def load_data(self, graph):
+        """
+        Инициализирует данные виджета.
+        """
+        # todo delete later, when proper graph will be prepared
+        self.pov_history.append({"graph": graph})
+        self._disable_pov_navigation_buttons()
+        self._reload_dependencies()
+    
+    def query_node_data(self, node):
+        if self._session is None:
+            return
+        self.observed_node = node
+
 
 
 class TableNodeList(QtWidgets.QTableView):
