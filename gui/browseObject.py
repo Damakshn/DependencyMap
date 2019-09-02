@@ -42,6 +42,9 @@ class ListObjectsWidget(QtWidgets.QWidget):
         self.view.setModel(self.model)
         self.view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.view.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.view.setSortingEnabled(True)
+        # по умолчанию сортируем по имени
+        self.model.sort(1)
         # присоединяем сигнал для оповещения о выделении строки
         self.view.selectionModel().selectionChanged.connect(self._process_row_selection)
         # ToDo make ralative column width
@@ -71,20 +74,24 @@ class BrowseObjectWidget(BrowseWidget):
         layout = QtWidgets.QVBoxLayout()
         layout.addWidget(self.tab_pane)
         self.setLayout(layout)
-
-    def _select_node(self):
+    
+    def _extract_selected_node(self):
         """
-        Обработчик сигнала выбора строки в таблице.
-        По id ноды находит её в списке orm-моделей.
+        По id находит выбранную ноду в списке orm-моделей.
         """
         tab_index = self.tab_pane.currentIndex()
         node_id = self.tab_pane.currentWidget().selected_id
         dataset = self._categories[tab_index]["dataset"]
         for item in dataset:
             if item.id == node_id:
-                self.selected_node = item
-                break
-        super()._node_selected()
+                return item
+
+    def _process_node_selection(self):
+        """
+        Обработчик сигнала выбора строки в таблице.
+        """
+        node = self._extract_selected_node()
+        self._set_selected_node(node)
 
     def load_data(self, dataset):
         self._categories = dataset
@@ -92,7 +99,7 @@ class BrowseObjectWidget(BrowseWidget):
             list_pane = ListObjectsWidget()
             list_pane.load_data(category["dataset"])
             # присоединяем сигнал для реакции на выбор строки в таблице
-            list_pane.row_selected.connect(self._select_node)
+            list_pane.row_selected.connect(self._process_node_selection)
             # ToDo при переключении вкладок надо сбрасывать выбранную вершину
             self.tab_pane.addTab(list_pane, category["name"])
 
@@ -110,26 +117,27 @@ class BrowseObjectWidget(BrowseWidget):
             }
         ]
         self.observed_node = None
+        self.selected_node = None
         self.load_data(dataset)
-    
+
     def query_node_data(self, node):
         if self._session is None:
             return
         if not hasattr(node, "categories"):
             raise Exception(f"Обзор объектов {node.__class__.__name__} не поддерживается.")
         self.observed_node = node
+        self.selected_node = None
         self.load_data(self.observed_node.categories)
 
     def clear(self):
         """
-        Очистить все вкладки
-        Очистить категории
-        Сбросить выбранную ноду
+        Очистить все вкладки, очистить категории, сбросить выбранную ноду
         """
         for index in range(len(self._categories)):
             widget = self.tab_pane.widget(index)
             self.tab_pane.removeTab(index)
             widget.close()
             widget.deleteLater()
-        self.selected_node = None
         self._categories = []
+        self.observed_node = None
+        self._set_selected_node(None)

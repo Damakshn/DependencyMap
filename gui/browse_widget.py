@@ -13,9 +13,10 @@ class BrowseWidget(QtWidgets.QWidget):
     def set_session(self, session):
         self._session = session
     
-    def _node_selected(self):
+    def _set_selected_node(self, node):
+        self.selected_node = node
         self.node_selected.emit()
 
-    # ToDo must be signal
-    def observed_node_changed(self):
-        return self.observed_node
+    def clear(self):
+        self.observed_node = None
+        self._set_selected_node(None)

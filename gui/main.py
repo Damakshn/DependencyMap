@@ -14,31 +14,27 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         self._actions = {}
         self._init_icons()
         self._init_toolbar_actions()
-        self.setWindowIcon(self._icons["program"])
         self._init_toolbar()
         self._init_main_menu()
         self._init_status_bar()
         self._container = QtWidgets.QStackedWidget()
         self.selected_node = None
+        self.setWindowIcon(self._icons["program"])
 
         self._browse_system_widget = BrowseObjectWidget()
-        self._browse_system_widget.node_selected.connect(self._select_node)
-
         self._browse_object_widget = BrowseObjectWidget()
-        self._browse_object_widget.node_selected.connect(self._select_node)
-
         self._browse_graph_widget = BrowseGraphWidget()
-        self._browse_graph_widget.node_selected.connect(self._select_node)
 
         for widget in self._browse_widgets():
             self._container.addWidget(widget)
+            widget.node_selected.connect(self._select_node)
         self._container.currentChanged.connect(self._browse_widget_changed)
         self.setCentralWidget(self._container)
 
         # по умолчанию главное окно находится в режиме обзора системы
         self._switch_to_system()
         self._browse_widget_changed()
-    
+
     # методы инициализации
     def _init_icons(self):
         self._icons = {
@@ -58,7 +54,7 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         self._actions["browse_system"].triggered.connect(self._switch_to_system)
         self._actions["browse_object"].triggered.connect(self._switch_to_object)
         self._actions["browse_graph"].triggered.connect(self._switch_to_graph)
-    
+
     def _init_toolbar(self):
         toolbar = QtWidgets.QToolBar(self)
         toolbar.setMovable(False)
@@ -79,6 +75,7 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         """
         Возвращает список обзорных виджетов.
         """
+        # ToDo формировать список динамически, отсев по isinstance
         return [
             self._browse_system_widget,
             self._browse_object_widget,
@@ -91,8 +88,7 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         """
         self.selected_node = self._container.currentWidget().selected_node
         self._toggle_toolbar_actions()
-    
-    # ToDo какая-то проблема с переключением кнопок, при многократных нажатиях всё сыпется
+
     def _switch_to_system(self):
         """
         Включает режим обзора системы
@@ -105,12 +101,10 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         """
         Включает режим обзора объекта.
         """
-        self._browse_object_widget.clear()
-        # надо завязать на виджет обзора
+        # запоминаем текущую выбранную ноду, так как виджет обзора объекта предварительно очищается и происходит сброс выделенной ноды через сигнал
         node = self.selected_node
-        self.selected_node = None
+        self._browse_object_widget.clear()
         index = self._container.indexOf(self._browse_object_widget)
-        # при углублённом просмотре не происходит смены индекса, а значит не прокает переключение кнопок
         self._container.setCurrentIndex(index)
         self._browse_object_widget.query_node_data(node)
 
@@ -118,16 +112,19 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         """
         Включает режим просмотра графа зависимостей.
         """
+        # запоминаем текущую выбранную ноду, так как виджет обзора графа предварительно очищается и происходит сброс выделенной ноды через сигнал
+        node = self.selected_node
+        self._browse_graph_widget.clear()
         index = self._container.indexOf(self._browse_graph_widget)
         self._container.setCurrentIndex(index)
-    
+        self._browse_graph_widget.query_node_data(node)
+
     def _toggle_toolbar_actions(self):
         """
         Прячет кнопки режимов просмотра в зависимости от того, какой
         из виджетов обзора сейчас активен и выбрана ли в нём сейчас какая-нибудь
         нода.
         """
-        print(self.selected_node)
         index = self._container.currentIndex()
         self._actions["browse_system"].setEnabled(
             index != self._container.indexOf(self._browse_system_widget)

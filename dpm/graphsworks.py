@@ -168,3 +168,10 @@ class DpmGraph:
         Рисует граф, применяя текущие настройки визуализации.
         """
         pass
+    
+    @property
+    def nodes(self):
+        return self.nx_graph.nodes()
+    
+    def __getitem__(self, key):
+        return self.nx_graph.node[key]

@@ -76,6 +76,15 @@ class Node(BaseDPM):
     
     def get_parents(self):
         return []
+    
+    def get_recommended_loading_depth(self):
+        """
+        Возвращает кортеж из количества уровней зависимостей,
+        которое рекомендуется подгружать при просмотре зависимостей
+        объектов данного типа. Первый элемент - восходящие зависимости,
+        второй - нисходящие.
+        """
+        return (float("inf"), float("inf"))
 
 
 class Edge(BaseDPM):
@@ -339,6 +348,15 @@ class ClientQuery(Node, SQLQueryMixin):
     
     def get_parents(self):
         return [(self.form, ["contain"])]
+    
+    def get_recommended_loading_depth(self):
+        """
+        Возвращает кортеж из количества уровней зависимостей,
+        которое рекомендуется подгружать при просмотре зависимостей
+        объектов данного типа. Первый элемент - восходящие зависимости,
+        второй - нисходящие.
+        """
+        return (0, 1)
 
 AppsAndForms = Table('AppsAndForms', BaseDPM.metadata,
     Column('form_id', Integer, ForeignKey('Form.id')),
@@ -428,6 +446,15 @@ class Form(Node):
         for app in self.applications:
             parents.append((app, ["contain"]))
         return parents
+    
+    def get_recommended_loading_depth(self):
+        """
+        Возвращает кортеж из количества уровней зависимостей,
+        которое рекомендуется подгружать при просмотре зависимостей
+        объектов данного типа. Первый элемент - восходящие зависимости,
+        второй - нисходящие.
+        """
+        return (0, 2)
 
 class Application(Node):
     """
@@ -483,6 +510,15 @@ class Application(Node):
     
     def get_parents(self):
         return []
+    
+    def get_recommended_loading_depth(self):
+        """
+        Возвращает кортеж из количества уровней зависимостей,
+        которое рекомендуется подгружать при просмотре зависимостей
+        объектов данного типа. Первый элемент - восходящие зависимости,
+        второй - нисходящие.
+        """
+        return (0, 3)
 
 
 class DBScript(DatabaseObject, SQLQueryMixin):
@@ -549,6 +585,15 @@ class DBScript(DatabaseObject, SQLQueryMixin):
                 continue
             parents.append((e.sourse, e.get_attributes_list()))
         return parents
+    
+    def get_recommended_loading_depth(self):
+        """
+        Возвращает кортеж из количества уровней зависимостей,
+        которое рекомендуется подгружать при просмотре зависимостей
+        объектов данного типа. Первый элемент - восходящие зависимости,
+        второй - нисходящие.
+        """
+        return (0, 1)
 
 
 class DBView(DBScript):
@@ -747,6 +792,15 @@ class DBTable(DatabaseObject):
         for e in self.edges_in:
             parents.append((e.sourse, e.get_attributes_list()))
         return parents
+    
+    def get_recommended_loading_depth(self):
+        """
+        Возвращает кортеж из количества уровней зависимостей,
+        которое рекомендуется подгружать при просмотре зависимостей
+        объектов данного типа. Первый элемент - восходящие зависимости,
+        второй - нисходящие.
+        """
+        return (1, 1)
 
 
 class Database(Node):
@@ -837,3 +891,12 @@ class Database(Node):
 
     def get_parents(self):
         return []
+    
+    def get_recommended_loading_depth(self):
+        """
+        Возвращает кортеж из количества уровней зависимостей,
+        которое рекомендуется подгружать при просмотре зависимостей
+        объектов данного типа. Первый элемент - восходящие зависимости,
+        второй - нисходящие.
+        """
+        return (0, float("inf"))

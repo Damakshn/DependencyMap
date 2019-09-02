@@ -5,6 +5,7 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from .browse_widget import BrowseWidget
 import os
 import settings
+from dpm.graphsworks import DpmGraph
 
 icons_for_nodes = {}
 
@@ -12,6 +13,12 @@ class BrowseGraphWidget(BrowseWidget):
     """
     Большой виджет, отвечающий за работу с графом зависимостей.
     """
+
+    _table_columns = [
+            {"header": "Тип объекта", "width_in_percent": 20, "hidden": False},
+            {"header": "ID", "width_in_percent": 0, "hidden": True},
+            {"header": "Имя", "width_in_percent": 80, "hidden": False}
+        ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -150,14 +157,126 @@ class BrowseGraphWidget(BrowseWidget):
         self.control_panel.layout().addWidget(panel)
 
     def _init_node_list(self):
-        # список вершин графа
+        """
+        Инициализирует виджеты, отвечающие за вывод списка вершин графа.
+        При включении группировки ставится дерево, при отключении - таблица.
+        """
         # ToDo зависимость от чекбокса группировки
+        self.node_list = QtWidgets.QStackedWidget()
+
+        self.tree_view = QtWidgets.QTreeView()
+
+        self.table_view = QtWidgets.QTableView()
+        self.table_view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
+        self.table_view.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+
+        self.node_list.addWidget(self.tree_view)
+        self.node_list.addWidget(self.table_view)
+        self.node_list.setCurrentIndex(self.node_list.indexOf(self.table_view))
+        
+        self.control_panel.layout().addWidget(self.node_list)
+
+    def _reload_dependencies(self):
         """
-        TBD датасет хранится где-то отдельно от виджета?
-        TBD виджет со списком как контейнер, в него кладётся конкретное представление?
-        При включении группировки ставится дерево, при отключении - таблица
+        Подгружает уровни зависимости объекта, изменяет граф, изменяет модели
+        для отображения списка в виде таблицы или дерева.
         """
+        levels_up = self.spb_up.value()
+        levels_down = self.spb_down.value()
+        history_point = self.pov_history[self.current_history_pos]
+        graph = history_point["graph"]
+        graph.load_dependencies(levels_up=levels_up, levels_down=levels_down)
+        history_point["table_model"] = self._convert_graph_to_table_model(graph)
+        history_point["tree_model"] = None
+        self._read_graph_from_history()
+
+    def _draw_current_graph(self):
+        # ToDo разобраться, как работает визуализация, что откуда надо вызывать, что куда передавать, что для чего надо
+        self.figure.clf()
+
+    def _read_graph_from_history(self):
+        """
+        Читает граф из текущей позиции в истории, заполняет значения виджетов значениями
+        из атрибутов графа и выводит граф в области для отображения.
+        """
+        history_point = self.pov_history[self.current_history_pos]
+        self._set_table_model(history_point["table_model"])
+        self._set_tree_model(history_point["tree_model"])
+        # ToDo достать из атрибутов графа значения для spb_up\down
+        self._draw_current_graph()
+
+    def _set_table_model(self, model):
+        self.table_view.setModel(model)
+        self.table_view.horizontalHeader().hide()
+        for column in range(len(self._table_columns)):
+            # ToDo с шириной виджета какая-то ерунда, надо убрать горизонтальную прокрутку
+            self.table_view.setColumnWidth(column, self._table_columns[column]["width_in_percent"] / 100 * self.table_view.width())
+            self.table_view.setColumnHidden(column, self._table_columns[column]["hidden"])
+
+    def _set_tree_model(self, model):
+        self.tree_view.setModel(model)
+        self.tree_view.header().hide()
+
+    def _change_pov(self, button):
+        """
+        движение по истории точек отсчёта
+        в зависимости от того, какая кнопка была нажата, двигается вперёд, назада, в начало или в конец
+        если достигнуто начало истории просмотров, то кнопки "в начало" и "назад" выключаются, если 
+        достигнут конец, то выключаются кнопки "Вперёд" и "в конец".
+        """
+        if button == self.pov_first:
+            self.current_history_pos = 0
+        elif button == self.pov_back:
+            self.current_history_pos -= 1
+        elif button == self.pov_forward:
+            self.current_history_pos += 1
+        elif button == self.pov_last:
+            self.current_history_pos = (len(self.pov_history) - 1)
+
+        self._toggle_pov_navigation_buttons()
+
+        self._read_graph_from_history()
+
+    def _toggle_pov_navigation_buttons(self):
+        not_begin = (self.current_history_pos != 0)
+        not_end = (self.current_history_pos != (len(self.pov_history) - 1))
+        self.pov_first.setEnabled(not_begin)
+        self.pov_back.setEnabled(not_begin)
+        self.pov_forward.setEnabled(not_end)
+        self.pov_last.setEnabled(not_end)
+
+    def _toggle_grouping(self):
+        pass
+
+    def _search_node_in_list(self):
+        pass
+
+    def _make_new_pov(self, node_id):
+        self.current_history_pos += 1
+        self._read_graph_from_history()
+        self._toggle_pov_navigation_buttons()
+    
+    def _set_dependencies_loading_levels(self):
+        """
+        По типу ноды определяем рекомендуемое количество уровней
+        зависимостей для загрузки, выставляем виджеты управления 
+        в соответствующее положение.
+        """
+        up, down = self.observed_node.get_recommended_loading_depth()
+
+        if up == float("inf"):
+            self.chb_up.setChecked(True)
+        else:
+            self.spb_up.setValue(up)
+
+        if down == float("inf"):
+            self.chb_down.setChecked(True)
+        else:
+            self.spb_down.setValue(down)
+
+    def _convert_graph_to_tree_model(self, graph):
         # черновой вариант
+        """
         tree_model = QtGui.QStandardItemModel()
         root_item = tree_model.invisibleRootItem()
 
@@ -172,127 +291,53 @@ class BrowseGraphWidget(BrowseWidget):
             new_item2 = QtGui.QStandardItem(f"{i+4}")
             item_up.appendRow(new_item1)
             item_down.appendRow(new_item2)
-
-        tree_view = QtWidgets.QTreeView()
-        tree_view.setModel(tree_model)
-        tree_view.header().hide()
-        
-        self.control_panel.layout().addWidget(tree_view)
-
-    def _reload_dependencies(self):
-        print("reload dependencies")
-        levels_up = self.spb_up.value()
-        levels_down = self.spb_down.value()
-        self.pov_history[self.current_history_pos]["graph"].load_dependencies(levels_up=levels_up, levels_down=levels_down)
-        self._draw_current_graph()
-
-    def _draw_current_graph(self):
-        # ToDo разобраться, как работает визуализация, что откуда надо вызывать, что куда передавать, что для чего надо
-        print("draw current graph")
-        self.figure.clf()
         """
-        nx.draw(B, pos=pos, with_labels=True)
-        self.canvas.draw_idle()
-        """
-
-    def _read_graph_from_history(self):
-        """
-        Читает граф из текущей позиции в истории, заполняет значения виджетов значениями
-        из атрибутов графа и выводит граф в области для отображения.
-        """
-        print("read graph from history")
-        self._draw_current_graph()
-
-    def _change_pov(self, button):
-        """
-        движение по истории точек отсчёта
-        в зависимости от того, какая кнопка была нажата, двигается вперёд, назада, в начало или в конец
-        если достигнуто начало истории просмотров, то кнопки "в начало" и "назад" выключаются, если 
-        достигнут конец, то выключаются кнопки "Вперёд" и "в конец".
-        """
-        print("change pov via button")
-        if button == self.pov_first:
-            self.current_history_pos = 0
-        elif button == self.pov_back:
-            self.current_history_pos -= 1
-        elif button == self.pov_forward:
-            self.current_history_pos += 1
-        elif button == self.pov_last:
-            self.current_history_pos = (len(self.pov_history) - 1)
-
-        self._disable_pov_navigation_buttons()
-
-        self._read_graph_from_history()
-
-    def _disable_pov_navigation_buttons(self):
-        print("disable pov navigation buttons")
-        not_begin = (self.current_history_pos != 0)
-        not_end = (self.current_history_pos != (len(self.pov_history) - 1))
-        self.pov_first.setEnabled(not_begin)
-        self.pov_back.setEnabled(not_begin)
-        self.pov_forward.setEnabled(not_end)
-        self.pov_last.setEnabled(not_end)
-
-    def _toggle_grouping(self):
-        print(f"toggle grouping {self.chb_grouping.isChecked()}")
-
-    def _search_node_in_list(self):
-        print(f"search for {self.le_search.text()}")
-
-    def _make_new_pov(self, node_id):
-        print(f"make new pov {node_id}")
-        self.current_history_pos += 1
-        self._read_graph_from_history()
-        self._disable_pov_navigation_buttons()
+        pass
     
+    def _convert_graph_to_table_model(self, graph):
+        model = QtGui.QStandardItemModel()
+        model.setHorizontalHeaderLabels([c["header"] for c in self._table_columns])
+        for node in graph.nodes:
+            icon = QtGui.QStandardItem(self._get_icon_for_node_class(graph[node]["node_class"]), "")
+            id = QtGui.QStandardItem(str(graph[node]["id"]))
+            name = QtGui.QStandardItem(graph[node]["label"])
+            model.appendRow([icon, id, name])
+        return model
+
+    def _get_icon_for_node_class(self, node_class):
+        """
+        Подбирает иконку для отображения ноды в списке в зависимости от класса ноды.
+        """
+        # ToDo подобрать иконки на всё подряд и создать каталог
+        return QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/table32.png"))
+
     # public methods
-    
+
     def load_data(self, graph):
         """
         Инициализирует данные виджета.
         """
         # todo delete later, when proper graph will be prepared
         self.pov_history.append({"graph": graph})
-        self._disable_pov_navigation_buttons()
+        self._toggle_pov_navigation_buttons()
         self._reload_dependencies()
-    
+
     def query_node_data(self, node):
         if self._session is None:
             return
         self.observed_node = node
+        new_graph = DpmGraph(self._session, node)
+        # ToDo создание модели происходит дальше, как-то не очень, может закатать всё в класс?
+        self.pov_history.append(
+            {
+                "graph": new_graph,
+                "table_model": None,
+                "tree_model": None
+            }
+        )
+        self._toggle_pov_navigation_buttons()
+        self._set_dependencies_loading_levels()
+        self._reload_dependencies()
 
-
-
-class TableNodeList(QtWidgets.QTableView):
-    """
-    Список объектов в виде таблицы
-
-    Настройка:
-        заголовка нет
-        2 колонки, первая узкая, вторая на всю оставшуюся ширину
-        1 колонка для иконки (создаётся специальный виджет), вторая для названия
-        вызов контекстного меню для каждой строки
-    """
+class BrowseGraphHistoryPoint:
     pass
-
-
-class TreeNodeList(QtWidgets.QTreeView):
-    """
-    Список объектов в виде дерева
-    """
-    pass
-
-
-class NodeContextMenu(QtWidgets.QMenu):
-    """
-    Контекстное меню объекта (ноды графа)
-    """
-    pass
-
-
-def convert_graph_to_table_model(graph):
-    return None
-
-
-def convert_graph_to_tree_model(graph):
-    return None
