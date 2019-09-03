@@ -75,7 +75,6 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         """
         Возвращает список обзорных виджетов.
         """
-        # ToDo формировать список динамически, отсев по isinstance
         return [
             self._browse_system_widget,
             self._browse_object_widget,

@@ -36,9 +36,9 @@ class BrowseGraphWidget(BrowseWidget):
 
     def _init_draw_area(self):
         self.figure = plt.figure()
-        self.draw_area = FigureCanvas(self.figure)
-        self.draw_area.setStyleSheet("background-color: #FFFFE0;")
-        self.layout().addWidget(self.draw_area, 0, 0)
+        self.canvas = FigureCanvas(self.figure)
+        self.layout().addWidget(self.canvas, 0, 0)
+
 
     def _init_control_panel(self):
         # Панель управления отображением графа и содержащая список объектов.
@@ -191,8 +191,10 @@ class BrowseGraphWidget(BrowseWidget):
         self._read_graph_from_history()
 
     def _draw_current_graph(self):
-        # ToDo разобраться, как работает визуализация, что откуда надо вызывать, что куда передавать, что для чего надо
+        print("drawing")
         self.figure.clf()
+        self.pov_history[self.current_history_pos]["graph"].show()
+        self.canvas.draw_idle()
 
     def _read_graph_from_history(self):
         """
@@ -312,16 +314,7 @@ class BrowseGraphWidget(BrowseWidget):
         return QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/table32.png"))
 
     # public methods
-
-    def load_data(self, graph):
-        """
-        Инициализирует данные виджета.
-        """
-        # todo delete later, when proper graph will be prepared
-        self.pov_history.append({"graph": graph})
-        self._toggle_pov_navigation_buttons()
-        self._reload_dependencies()
-
+    
     def query_node_data(self, node):
         if self._session is None:
             return

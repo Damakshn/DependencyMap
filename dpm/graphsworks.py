@@ -1,5 +1,6 @@
 import networkx as nx
 from .models import Node
+import settings
 
 """
 Этот модуль запрашивает информацию о зависимостях объектов из базы и формирует
@@ -24,7 +25,7 @@ from .models import Node
 
 class DpmGraph:
 
-    # TBD как быть, если требуется загрузить зависимости вниз на 6 уровней,
+    # ToDo как быть, если требуется загрузить зависимости вниз на 6 уровней,
     # а существует всего 5, тогда в атрибутах графа проставится 6, а по факту глубина
     # будет меньше
 
@@ -71,7 +72,7 @@ class DpmGraph:
         elif levels_down < self.levels_down:
             self._cut_lower_levels(levels_down)
 
-        # TBD оставить так или пересчитать длины путей и сохранить фактическое значение?
+        # ToDo оставить так или пересчитать длины путей и сохранить фактическое значение?
         self.levels_up = levels_up
         self.levels_down = levels_down
 
@@ -167,7 +168,30 @@ class DpmGraph:
         """
         Рисует граф, применяя текущие настройки визуализации.
         """
-        pass
+        # красивая визуализация http://jonathansoma.com/lede/algorithms-2017/classes/networks/networkx-graphs-from-source-target-dataframe/
+        config = settings.visualization
+        pos = nx.spring_layout(self.nx_graph)
+        for class_name in config["nodes"]:
+            nx.draw_networkx_nodes(
+                self.nx_graph, 
+                pos, 
+                [n for n in self.nx_graph.node if self.nx_graph.node[n]["node_class"]==class_name], 
+                **config["nodes"][class_name]
+            )
+        for operation in config["edges"]:
+            nx.draw_networkx_edges(
+                self.nx_graph, 
+                pos, 
+                [e for e in self.nx_graph.edges if self.nx_graph.adj[e[0]][e[1]][0].get(operation)==True], 
+                **config["edges"][operation]
+            )
+        nx.draw_networkx_labels(
+            self.nx_graph, 
+            pos, 
+            {n:self.nx_graph.node[n]["label"] for n in self.nx_graph.node}, 
+            font_size=6
+        )
+
     
     @property
     def nodes(self):
