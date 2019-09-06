@@ -173,12 +173,48 @@ class BrowseGraphWidget(BrowseWidget):
         self.node_list.addWidget(self.tree_view)
         self.node_list.addWidget(self.table_view)
         self.node_list.setCurrentIndex(self.node_list.indexOf(self.table_view))
-        
+
         self.control_panel.layout().addWidget(self.node_list)
+    
+    def _set_table_model(self, model):
+        """
+        Устанавливает табличную модель для виджета со списком вершин графа.
+        """
+        self.table_view.setModel(model)
+        self.table_view.horizontalHeader().hide()
+        for column in range(len(self._table_columns)):
+            # ToDo с шириной виджета какая-то ерунда, надо убрать горизонтальную прокрутку
+            self.table_view.setColumnWidth(column, self._table_columns[column]["width_in_percent"] / 100 * self.table_view.width())
+            self.table_view.setColumnHidden(column, self._table_columns[column]["hidden"])
+
+    def _set_tree_model(self, model):
+        """
+        Устанавливает древовидную модель для виджета со списком вершин графа.
+        """
+        self.tree_view.setModel(model)
+        self.tree_view.header().hide()
+    
+    def _read_graph_from_history(self):
+        """
+        Читает граф из текущей позиции в истории, заполняет значения виджетов значениями
+        из атрибутов графа и выводит граф в области для отображения.
+        """
+        history_point = self.pov_history[self.current_history_pos]
+        self._set_table_model(history_point["table_model"])
+        self._set_tree_model(history_point["tree_model"])
+
+        # считываем из текущего графа параметры загрузки зависимостей
+        # и ставим их в элементы управления на форме
+        self.chb_down.setChecked(history_point["graph"].reached_bottom_limit)
+        self.chb_up.setChecked(history_point["graph"].reached_upper_limit)
+        self.spb_down.setValue(history_point["graph"].levels_down)
+        self.spb_up.setValue(history_point["graph"].levels_up)
+
+        self._draw_current_graph()
 
     def _reload_dependencies(self):
         """
-        Подгружает уровни зависимости объекта, изменяет граф, изменяет модели
+        Подгружает уровни зависимости объекта, изменяет текущий граф, изменяет модели
         для отображения списка в виде таблицы или дерева.
         """
         levels_up = self.spb_up.value()
@@ -191,33 +227,14 @@ class BrowseGraphWidget(BrowseWidget):
         self._read_graph_from_history()
 
     def _draw_current_graph(self):
-        print("drawing")
+        """
+        Отображает текущий граф в области для рисования.
+        """
+        # ToDo узнать, можно ли добавить зум и другие плюшки
+        # ToDo надо увеличить размер области, чтобы она занимала всё окно
         self.figure.clf()
         self.pov_history[self.current_history_pos]["graph"].show()
         self.canvas.draw_idle()
-
-    def _read_graph_from_history(self):
-        """
-        Читает граф из текущей позиции в истории, заполняет значения виджетов значениями
-        из атрибутов графа и выводит граф в области для отображения.
-        """
-        history_point = self.pov_history[self.current_history_pos]
-        self._set_table_model(history_point["table_model"])
-        self._set_tree_model(history_point["tree_model"])
-        # ToDo достать из атрибутов графа значения для spb_up\down
-        self._draw_current_graph()
-
-    def _set_table_model(self, model):
-        self.table_view.setModel(model)
-        self.table_view.horizontalHeader().hide()
-        for column in range(len(self._table_columns)):
-            # ToDo с шириной виджета какая-то ерунда, надо убрать горизонтальную прокрутку
-            self.table_view.setColumnWidth(column, self._table_columns[column]["width_in_percent"] / 100 * self.table_view.width())
-            self.table_view.setColumnHidden(column, self._table_columns[column]["hidden"])
-
-    def _set_tree_model(self, model):
-        self.tree_view.setModel(model)
-        self.tree_view.header().hide()
 
     def _change_pov(self, button):
         """
@@ -277,6 +294,9 @@ class BrowseGraphWidget(BrowseWidget):
             self.spb_down.setValue(down)
 
     def _convert_graph_to_tree_model(self, graph):
+        """
+        Конвертирует граф в древовидную модель для виджета.
+        """
         # черновой вариант
         """
         tree_model = QtGui.QStandardItemModel()
@@ -297,6 +317,9 @@ class BrowseGraphWidget(BrowseWidget):
         pass
     
     def _convert_graph_to_table_model(self, graph):
+        """
+        Конвертирует граф в табличную модель для виджета.
+        """
         model = QtGui.QStandardItemModel()
         model.setHorizontalHeaderLabels([c["header"] for c in self._table_columns])
         for node in graph.nodes:

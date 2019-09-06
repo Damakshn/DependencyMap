@@ -39,6 +39,8 @@ class DpmGraph:
             self.nx_graph = nx_graph
         self.levels_up = 0
         self.levels_down = 0
+        self.reached_bottom_limit = False
+        self.reached_upper_limit = False
 
     def hide_element(self, node_id):
         """
@@ -63,18 +65,16 @@ class DpmGraph:
             return
 
         if levels_up > self.levels_up:
-            self._load_dependencies_up(levels_up - self.levels_up)
+            self.reached_upper_limit = self._load_dependencies_up(levels_up - self.levels_up)
         elif levels_up < self.levels_up:
             self._cut_upper_levels(levels_up)
+            self.reached_upper_limit = False
 
         if levels_down > self.levels_down:
-            self._load_dependencies_down(levels_down - self.levels_down)
+            self.reached_bottom_limit = self._load_dependencies_down(levels_down - self.levels_down)
         elif levels_down < self.levels_down:
             self._cut_lower_levels(levels_down)
-
-        # ToDo оставить так или пересчитать длины путей и сохранить фактическое значение?
-        self.levels_up = levels_up
-        self.levels_down = levels_down
+            self.reached_bottom_limit = False
 
         self._recalc()
 
@@ -107,8 +107,10 @@ class DpmGraph:
             if length[node_id] == self.levels_up:
                 upper_periphery.add(node_id)
         # используем набор крайних вершин как отправную точку для поиска
+        rising_failed = []
         for node in self.session.query(Node).filter(Node.id.in_(upper_periphery)).all():
-            self._explore_upper_nodes(node, levels_counter)
+            rising_failed.append(self._explore_upper_nodes(node, levels_counter))
+        return all(rising_failed)
 
     def _load_dependencies_down(self, levels_counter):
         """
@@ -121,38 +123,70 @@ class DpmGraph:
             if length[node_id] == self.levels_down:
                 bottom_periphery.add(node_id)
         # используем набор крайних вершин как отправную точку для поиска
+        digging_failed = []
         for node in self.session.query(Node).filter(Node.id.in_(bottom_periphery)).all():
-            self._explore_lower_nodes(node, levels_counter)
+            digging_failed.append(self._explore_lower_nodes(node, levels_counter))
+        return all(digging_failed)
 
     def _explore_lower_nodes(self, node, levels_counter):
         """
         Закапывается на levels_counter уровней вглубь зависимостей указанной вершины.
+        Возвращает True, если закопаться на нужное количество уровней не удалось и поиск
+        окончился раньше времени.
+        Это значение служит индикатором того, что граф исследован вглубь до конца.
         """
-        for child, edge_attrs in node.get_children():
+        children = node.get_children()
+        if len(children) == 0:
+            return True
+        digging_failed = []
+        for child, edge_attrs in children:
             # если новая вершина ещё не добавлена в граф, то добавляем её id в граф и прописываем все атрибуты
             if child.id not in self.nx_graph:
                 self._add_nx_node_from_model(child)
-                # если нужно углубиться ещё на несколько уровней
+                # исследуем дочернюю вершину, если нужно 
+                # углубиться ещё на несколько уровней
+                # и сохраняем результат
                 if levels_counter > 1:
-                    self._explore_lower_nodes(child, levels_counter-1)
+                    digging_failed.append(self._explore_lower_nodes(child, levels_counter-1))
             # присоединяем дочернюю вершину к родительской, создавая ребро графа для каждой операции
             for attr in edge_attrs:
                 self.nx_graph.add_edge(node.id, child.id, **{attr: True})
+        # после прохода по всем потомкам digging_failed 
+        # может быть пустым, так как все потомки этой 
+        # вершины уже были добавлены в граф ранее
+        if len(digging_failed) == 0:
+            digging_failed.append(False)
+        return all(digging_failed)
 
     def _explore_upper_nodes(self, node, levels_counter):
         """
         Закапывается на levels_counter уровней вверх по зависимостям указанной вершины.
+        Возвращает True, если подняться на нужное количество уровней не удалось и поиск
+        окончился раньше времени. 
+        Это значение служит индикатором того, что граф исследован вверх до конца.
         """
+        parents = node.get_parents()
+        if len(parents) == 0:
+            return True
+        rising_failed = []
         for parent, edge_attrs in node.get_parents():
             # если новая вершина ещё не добавлена в граф, то добавляем её id в граф и прописываем все атрибуты
             if parent.id not in self.nx_graph:
                 self._add_nx_node_from_model(parent)
-                # если нужно углубиться ещё на несколько уровней
+                # исследуем дочернюю вершину, если нужно 
+                # подняться ещё на несколько уровней
+                # и сохраняем результат
                 if levels_counter > 1:
-                    self._explore_upper_nodes(parent, levels_counter-1)
+                    rising_failed.append(self._explore_upper_nodes(parent, levels_counter-1))
             # присоединяем родительскую вершину к дочерней, создавая ребро графа для каждой операции
             for attr in edge_attrs:
                 self.nx_graph.add_edge(parent.id, node.id, **{attr: True})
+        # после прохода по всем предкам digging_failed 
+        # может быть пустым, так как все потомки этой 
+        # вершины уже были добавлены в граф ранее
+        if len(rising_failed) == 0:
+            rising_failed.append(False)
+        return all(rising_failed)
 
     def _add_nx_node_from_model(self, model):
         """
@@ -162,7 +196,14 @@ class DpmGraph:
         self.nx_graph.add_node(model.id, label=model.label, node_class=model.__class__.__name__, id=model.id, hidden=False)
 
     def _recalc(self):
-        pass
+        """
+        Обходит граф, считая максимальные длины путей в центральную вершину и из неё.
+        """
+        path_down = nx.single_source_shortest_path_length(self.nx_graph, self.pov_id)
+        path_up = dict(nx.single_target_shortest_path_length(self.nx_graph, self.pov_id))
+
+        self.levels_down = max([length for length in path_down.values()])
+        self.levels_up = max([length for length in path_up.values()])
 
     def show(self):
         """
@@ -170,7 +211,7 @@ class DpmGraph:
         """
         # красивая визуализация http://jonathansoma.com/lede/algorithms-2017/classes/networks/networkx-graphs-from-source-target-dataframe/
         config = settings.visualization
-        pos = nx.spring_layout(self.nx_graph)
+        pos = nx.spring_layout(self.nx_graph, iterations=150)
         for class_name in config["nodes"]:
             nx.draw_networkx_nodes(
                 self.nx_graph, 
