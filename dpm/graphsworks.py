@@ -25,10 +25,11 @@ import settings
 
 class DpmGraph:
 
-    # ToDo как быть, если требуется загрузить зависимости вниз на 6 уровней,
-    # а существует всего 5, тогда в атрибутах графа проставится 6, а по факту глубина
-    # будет меньше
-
+    """
+    Класс, отвечающий за обработку графовых данных, при этом умеющий также
+    подгружать информацию из БД.
+    """
+   
     def __init__(self, session, pov_node, nx_graph=None):
         self.session = session
         self.pov_id = pov_node.id
@@ -137,25 +138,25 @@ class DpmGraph:
         """
         children = node.get_children()
         if len(children) == 0:
+            # если у вершины нет потомков, то помечаем её как периферийную
+            self._set_node_as_peripheral(node.id)
             return True
         digging_failed = []
         for child, edge_attrs in children:
             # если новая вершина ещё не добавлена в граф, то добавляем её id в граф и прописываем все атрибуты
             if child.id not in self.nx_graph:
                 self._add_nx_node_from_model(child)
-                # исследуем дочернюю вершину, если нужно 
-                # углубиться ещё на несколько уровней
+                # исследуем дочернюю вершину, если нужно углубиться
+                # ещё на несколько уровней
                 # и сохраняем результат
                 if levels_counter > 1:
                     digging_failed.append(self._explore_lower_nodes(child, levels_counter-1))
+            else:
+                # если вершина уже в графе, то проверяем является ли она периферийной
+                digging_failed.append(self._check_node_is_peripheral(child.id))
             # присоединяем дочернюю вершину к родительской, создавая ребро графа для каждой операции
             for attr in edge_attrs:
                 self.nx_graph.add_edge(node.id, child.id, **{attr: True})
-        # после прохода по всем потомкам digging_failed 
-        # может быть пустым, так как все потомки этой 
-        # вершины уже были добавлены в граф ранее
-        if len(digging_failed) == 0:
-            digging_failed.append(False)
         return all(digging_failed)
 
     def _explore_upper_nodes(self, node, levels_counter):
@@ -167,6 +168,8 @@ class DpmGraph:
         """
         parents = node.get_parents()
         if len(parents) == 0:
+            # если у вершины нет предков, то помечаем её как периферийную
+            self._set_node_as_peripheral(node.id)
             return True
         rising_failed = []
         for parent, edge_attrs in node.get_parents():
@@ -178,22 +181,26 @@ class DpmGraph:
                 # и сохраняем результат
                 if levels_counter > 1:
                     rising_failed.append(self._explore_upper_nodes(parent, levels_counter-1))
+            else:
+                # если вершина уже в графе, то проверяем является ли она периферийной
+                rising_failed.append(self._check_node_is_peripheral(parent.id))
             # присоединяем родительскую вершину к дочерней, создавая ребро графа для каждой операции
             for attr in edge_attrs:
                 self.nx_graph.add_edge(parent.id, node.id, **{attr: True})
-        # после прохода по всем предкам digging_failed 
-        # может быть пустым, так как все потомки этой 
-        # вершины уже были добавлены в граф ранее
-        if len(rising_failed) == 0:
-            rising_failed.append(False)
         return all(rising_failed)
+    
+    def _set_node_as_peripheral(self, node_id):
+        self.nx_graph.node[node_id]["peripheral"] = True
+    
+    def _check_node_is_peripheral(self, node_id):
+        return self.nx_graph.node[node_id]["peripheral"]
 
     def _add_nx_node_from_model(self, model):
         """
         Добавляет в граф новую вершину, беря данные из её orm-модели.
         Поскольку набор атрибутов вершин может меняться, эта операция вынесена в отдельный метод.
         """
-        self.nx_graph.add_node(model.id, label=model.label, node_class=model.__class__.__name__, id=model.id, hidden=False)
+        self.nx_graph.add_node(model.id, label=model.label, node_class=model.__class__.__name__, id=model.id, hidden=False, peripheral=False)
 
     def _recalc(self):
         """
