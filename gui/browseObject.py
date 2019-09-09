@@ -1,6 +1,7 @@
 from PySide2 import QtWidgets, QtGui, QtCore
 from .browse_widget import BrowseWidget
 import dpm.models as models
+from .collection import IconCollection
 
 
 class ListObjectsWidget(QtWidgets.QWidget):

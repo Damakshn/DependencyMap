@@ -22,6 +22,7 @@ import settings
 от ноды формы, правильно визуализировать связи нужных типов, дозапрашивать данные из базы по id объекта.
 """
 
+# ToDo сделать послойную загрузку зависимостей вместо повершинной
 
 class DpmGraph:
 
@@ -244,6 +245,13 @@ class DpmGraph:
     @property
     def nodes(self):
         return self.nx_graph.nodes()
+    
+    @property
+    def number_of_subordinate_nodes(self):
+        """
+        Возвращает количество вершин за вычетом POV.
+        """
+        return len(self.nx_graph.nodes())-1
     
     def __getitem__(self, key):
         return self.nx_graph.node[key]

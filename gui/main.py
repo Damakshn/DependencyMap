@@ -4,22 +4,22 @@ from .browseObject import BrowseObjectWidget
 from .browseGraph import BrowseGraphWidget
 import settings
 import os
+from .collection import IconCollection
 
 
 class DpmMainWindow(QtWidgets.QMainWindow):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._icons = {}
+        IconCollection.initialize()
         self._actions = {}
-        self._init_icons()
         self._init_toolbar_actions()
         self._init_toolbar()
         self._init_main_menu()
         self._init_status_bar()
         self._container = QtWidgets.QStackedWidget()
         self.selected_node = None
-        self.setWindowIcon(self._icons["program"])
+        self.setWindowIcon(IconCollection.icons["program"])
 
         self._browse_system_widget = BrowseObjectWidget()
         self._browse_object_widget = BrowseObjectWidget()
@@ -36,19 +36,13 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         self._browse_widget_changed()
 
     # методы инициализации
-    def _init_icons(self):
-        self._icons = {
-            "program": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/system48.jpg")),
-            "browse_system": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/system48.png")),
-            "browse_object":  QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/list48.png")),
-            "browse_graph":  QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/network48.png"))
-        }
 
     def _init_toolbar_actions(self):
+        
         self._actions = {
-            "browse_system": QtWidgets.QAction(self._icons["browse_system"], "Обзор системы"),
-            "browse_object":  QtWidgets.QAction(self._icons["browse_object"], "Обзор объекта"),
-            "browse_graph":  QtWidgets.QAction(self._icons["browse_graph"], "Просмотр зависимостей")
+            "browse_system": QtWidgets.QAction(IconCollection.icons["browse_system"], "Обзор системы"),
+            "browse_object":  QtWidgets.QAction(IconCollection.icons["browse_object"], "Обзор объекта"),
+            "browse_graph":  QtWidgets.QAction(IconCollection.icons["browse_graph"], "Просмотр зависимостей")
         }
         # ToDo toggle actions instead of clicks
         self._actions["browse_system"].triggered.connect(self._switch_to_system)

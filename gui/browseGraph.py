@@ -6,18 +6,25 @@ from .browse_widget import BrowseWidget
 import os
 import settings
 from dpm.graphsworks import DpmGraph
+from .collection import IconCollection
 
-icons_for_nodes = {}
 
 class BrowseGraphWidget(BrowseWidget):
     """
     Большой виджет, отвечающий за работу с графом зависимостей.
     """
 
+    # ToDo событие выбора ноды в списке и его передача наверх
+    # ToDo экспорт графа в другие форматы
+    # ToDo зависимость модели от чекбокса группировки
+    # ToDo узнать, можно ли добавить зум и другие плюшки
+    # ToDo надо увеличить размер области рисования, чтобы она занимала всё окно
+    # ToDo создать класс для описания элементов pov_history?
+
     _table_columns = [
-            {"header": "Тип объекта", "width_in_percent": 20, "hidden": False},
-            {"header": "ID", "width_in_percent": 0, "hidden": True},
-            {"header": "Имя", "width_in_percent": 80, "hidden": False}
+            {"header": "Тип объекта", "width": 35, "hidden": False},
+            {"header": "ID", "width": 0, "hidden": True},
+            {"header": "Имя", "width": 400, "hidden": False}
         ]
 
     def __init__(self, *args, **kwargs):
@@ -64,28 +71,26 @@ class BrowseGraphWidget(BrowseWidget):
         grid.setColumnStretch(5, 1)
         # иконка точки отсчёта
         self.pov_icon = QtWidgets.QLabel()
-        self.pov_icon.setPixmap(QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/package.jpg")))
         grid.addWidget(self.pov_icon, 0, 0)
         # имя точки отсчёта
         self.pov_label = QtWidgets.QLabel()
-        self.pov_label.setText("Это точка отсчёта")
         grid.addWidget(self.pov_label, 0, 1)
         # стрелки
         # в начало
         self.pov_first = QtWidgets.QPushButton()
-        self.pov_first.setIcon(QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/begin32.png")))
+        self.pov_first.setIcon(IconCollection.pixmaps["begin"])
         grid.addWidget(self.pov_first, 0, 2)
         # назад
         self.pov_back = QtWidgets.QPushButton()
-        self.pov_back.setIcon(QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/back32.png")))
+        self.pov_back.setIcon(IconCollection.pixmaps["back"])
         grid.addWidget(self.pov_back, 0, 3)
         # вперёд
         self.pov_forward = QtWidgets.QPushButton()
-        self.pov_forward.setIcon(QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/forward32.png")))
+        self.pov_forward.setIcon(IconCollection.pixmaps["forward"])
         grid.addWidget(self.pov_forward, 0, 4)
         # в конец
         self.pov_last = QtWidgets.QPushButton()
-        self.pov_last.setIcon(QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/end32.png")))
+        self.pov_last.setIcon(IconCollection.pixmaps["end"])
         grid.addWidget(self.pov_last, 0, 5)
 
         self.pov_first.clicked.connect(lambda: self._change_pov(self.pov_first))
@@ -161,7 +166,6 @@ class BrowseGraphWidget(BrowseWidget):
         Инициализирует виджеты, отвечающие за вывод списка вершин графа.
         При включении группировки ставится дерево, при отключении - таблица.
         """
-        # ToDo зависимость от чекбокса группировки
         self.node_list = QtWidgets.QStackedWidget()
 
         self.tree_view = QtWidgets.QTreeView()
@@ -175,7 +179,10 @@ class BrowseGraphWidget(BrowseWidget):
         self.node_list.setCurrentIndex(self.node_list.indexOf(self.table_view))
 
         self.control_panel.layout().addWidget(self.node_list)
-    
+
+        self.number_of_nodes = QtWidgets.QLabel(f"Объектов: ")
+        self.control_panel.layout().addWidget(self.number_of_nodes)
+
     def _set_table_model(self, model):
         """
         Устанавливает табличную модель для виджета со списком вершин графа.
@@ -183,8 +190,7 @@ class BrowseGraphWidget(BrowseWidget):
         self.table_view.setModel(model)
         self.table_view.horizontalHeader().hide()
         for column in range(len(self._table_columns)):
-            # ToDo с шириной виджета какая-то ерунда, надо убрать горизонтальную прокрутку
-            self.table_view.setColumnWidth(column, self._table_columns[column]["width_in_percent"] / 100 * self.table_view.width())
+            self.table_view.setColumnWidth(column, self._table_columns[column]["width"])
             self.table_view.setColumnHidden(column, self._table_columns[column]["hidden"])
 
     def _set_tree_model(self, model):
@@ -200,15 +206,26 @@ class BrowseGraphWidget(BrowseWidget):
         из атрибутов графа и выводит граф в области для отображения.
         """
         history_point = self.pov_history[self.current_history_pos]
+        current_graph = history_point["graph"]
         self._set_table_model(history_point["table_model"])
         self._set_tree_model(history_point["tree_model"])
 
         # считываем из текущего графа параметры загрузки зависимостей
         # и ставим их в элементы управления на форме
-        self.chb_down.setChecked(history_point["graph"].reached_bottom_limit)
-        self.chb_up.setChecked(history_point["graph"].reached_upper_limit)
-        self.spb_down.setValue(history_point["graph"].levels_down)
-        self.spb_up.setValue(history_point["graph"].levels_up)
+        self.chb_down.setChecked(current_graph.reached_bottom_limit)
+        self.chb_up.setChecked(current_graph.reached_upper_limit)
+        self.spb_down.setValue(current_graph.levels_down)
+        self.spb_up.setValue(current_graph.levels_up)
+        # количество объектов (под списком)
+        self.number_of_nodes.setText(f"Объектов: {history_point['graph'].number_of_subordinate_nodes}")
+        # иконка pov-вершины
+        self.pov_icon.setPixmap(
+            IconCollection.get_pixmap_for_node_class(
+                current_graph[current_graph.pov_id]["node_class"]
+            )
+        )
+        self.pov_label.setText(current_graph[current_graph.pov_id]["label"])
+        
 
         self._draw_current_graph()
 
@@ -230,8 +247,6 @@ class BrowseGraphWidget(BrowseWidget):
         """
         Отображает текущий граф в области для рисования.
         """
-        # ToDo узнать, можно ли добавить зум и другие плюшки
-        # ToDo надо увеличить размер области, чтобы она занимала всё окно
         self.figure.clf()
         self.pov_history[self.current_history_pos]["graph"].show()
         self.canvas.draw_idle()
@@ -323,6 +338,8 @@ class BrowseGraphWidget(BrowseWidget):
         model = QtGui.QStandardItemModel()
         model.setHorizontalHeaderLabels([c["header"] for c in self._table_columns])
         for node in graph.nodes:
+            if node == graph.pov_id:
+                continue
             icon = QtGui.QStandardItem(self._get_icon_for_node_class(graph[node]["node_class"]), "")
             id = QtGui.QStandardItem(str(graph[node]["id"]))
             name = QtGui.QStandardItem(graph[node]["label"])
@@ -333,8 +350,7 @@ class BrowseGraphWidget(BrowseWidget):
         """
         Подбирает иконку для отображения ноды в списке в зависимости от класса ноды.
         """
-        # ToDo подобрать иконки на всё подряд и создать каталог
-        return QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/table32.png"))
+        return IconCollection.get_icon_for_node_class(node_class)
 
     # public methods
     
@@ -343,7 +359,7 @@ class BrowseGraphWidget(BrowseWidget):
             return
         self.observed_node = node
         new_graph = DpmGraph(self._session, node)
-        # ToDo создание модели происходит дальше, как-то не очень, может закатать всё в класс?
+        
         self.pov_history.append(
             {
                 "graph": new_graph,
