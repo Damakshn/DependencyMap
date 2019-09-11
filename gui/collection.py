@@ -29,7 +29,9 @@ class IconCollection:
             "program": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/system48.jpg")),
             "browse_system": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/system48.png")),
             "browse_object":  QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/list48.png")),
-            "browse_graph":  QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/network48.png"))
+            "browse_graph":  QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/network48.png")),
+            "new_pov": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/new_pov.png")),
+            "invisible": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/invisible.png")),
         }
 
         IconCollection.pixmaps = {

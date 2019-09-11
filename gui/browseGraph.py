@@ -1,4 +1,4 @@
-from PySide2 import QtWidgets, QtGui
+from PySide2 import QtWidgets, QtGui, QtCore
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
@@ -9,23 +9,30 @@ from dpm.graphsworks import DpmGraph
 from .collection import IconCollection
 
 
+
 class BrowseGraphWidget(BrowseWidget):
     """
     Большой виджет, отвечающий за работу с графом зависимостей.
     """
-
+    # ToDo древовидная модель
     # ToDo событие выбора ноды в списке и его передача наверх
+    # ToDo переход к новой точке отсчёта
+    # ToDo скрытые пользователем объекты показывать в таблице, выделенные другим цветом, объекты, скрытые автоматически в таблице не выводятся
+    # ToDo при щелчке на скрытых пользователем объектах в таблице пункт контекстного меню "Скрыть" должен быть заменён на "Показать"
+    # ToDo счётчик количества объектов под таблицей должен показывать кол-во видимых объектов
     # ToDo экспорт графа в другие форматы
     # ToDo зависимость модели от чекбокса группировки
     # ToDo узнать, можно ли добавить зум и другие плюшки
     # ToDo надо увеличить размер области рисования, чтобы она занимала всё окно
-    # ToDo создать класс для описания элементов pov_history?
+    # ToDo создать класс HistoryPoint для описания элементов pov_history
 
     _table_columns = [
-            {"header": "Тип объекта", "width": 35, "hidden": False},
-            {"header": "ID", "width": 0, "hidden": True},
-            {"header": "Имя", "width": 400, "hidden": False}
-        ]
+        {"header": "Тип объекта", "width": 35, "hidden": False},
+        {"header": "ID", "width": 100, "hidden": True},
+        {"header": "Имя", "width": 400, "hidden": False},
+        {"header": "Скрыто", "width": 100, "hidden": True},
+        {"header": "Скрыто пользователем", "width": 100, "hidden": True},
+    ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -40,6 +47,8 @@ class BrowseGraphWidget(BrowseWidget):
         self.setLayout(grid)
         self._init_draw_area()
         self._init_control_panel()
+        self._init_node_context_menu()
+
 
     def _init_draw_area(self):
         self.figure = plt.figure()
@@ -102,6 +111,15 @@ class BrowseGraphWidget(BrowseWidget):
         groupbox.setLayout(grid)
         groupbox.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
         self.control_panel.layout().addWidget(groupbox)
+    
+    def _init_node_context_menu(self):
+        self.node_context_menu = QtWidgets.QMenu()
+
+        self.node_action_set_pov = QtWidgets.QAction(IconCollection.icons["new_pov"], "Сделать точкой отсчёта")
+        self.node_action_set_pov.triggered.connect(self._make_new_pov)
+
+        self.node_action_hide = QtWidgets.QAction(IconCollection.icons["invisible"], "Скрыть")
+        self.node_action_hide.triggered.connect(self._hide_node)
 
     def _init_dependencies_panel(self):
         # панель управления подгрузкой зависимостей
@@ -160,6 +178,11 @@ class BrowseGraphWidget(BrowseWidget):
         panel.setLayout(grid)
         panel.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
         self.control_panel.layout().addWidget(panel)
+    
+    def _show_node_context_menu(self, position):
+        self.node_context_menu.addAction(self.node_action_set_pov)
+        self.node_context_menu.addAction(self.node_action_hide)
+        self.node_context_menu.exec_(self.table_view.viewport().mapToGlobal(position))
 
     def _init_node_list(self):
         """
@@ -173,6 +196,8 @@ class BrowseGraphWidget(BrowseWidget):
         self.table_view = QtWidgets.QTableView()
         self.table_view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.table_view.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
+        self.table_view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.table_view.customContextMenuRequested.connect(self._show_node_context_menu)
 
         self.node_list.addWidget(self.tree_view)
         self.node_list.addWidget(self.table_view)
@@ -242,6 +267,7 @@ class BrowseGraphWidget(BrowseWidget):
         history_point["table_model"] = self._convert_graph_to_table_model(graph)
         history_point["tree_model"] = None
         self._read_graph_from_history()
+        self._draw_current_graph()
 
     def _draw_current_graph(self):
         """
@@ -285,11 +311,20 @@ class BrowseGraphWidget(BrowseWidget):
     def _search_node_in_list(self):
         pass
 
-    def _make_new_pov(self, node_id):
-        self.current_history_pos += 1
-        self._read_graph_from_history()
-        self._toggle_pov_navigation_buttons()
+    def _make_new_pov(self):
+        print(f"make new pov")
+        # self.current_history_pos += 1
+        # self._read_graph_from_history()
+        # self._toggle_pov_navigation_buttons()
     
+    def _hide_node(self):
+        row_num = self.table_view.selectionModel().selectedRows()[0].row()
+        model = self.table_view.model()
+        node_id = int(model.data(model.index(row_num, 1)))
+        #print(bool(model.index(row_num, 3).data()))
+        self.pov_history[self.current_history_pos]["graph"].hide_node(node_id)
+        self._draw_current_graph()
+
     def _set_dependencies_loading_levels(self):
         """
         По типу ноды определяем рекомендуемое количество уровней
@@ -343,7 +378,9 @@ class BrowseGraphWidget(BrowseWidget):
             icon = QtGui.QStandardItem(self._get_icon_for_node_class(graph[node]["node_class"]), "")
             id = QtGui.QStandardItem(str(graph[node]["id"]))
             name = QtGui.QStandardItem(graph[node]["label"])
-            model.appendRow([icon, id, name])
+            hidden = QtGui.QStandardItem("True" if graph[node]["hidden"] else "")
+            hidden_by_user = QtGui.QStandardItem("True" if graph[node]["hidden_by_user"] else "")
+            model.appendRow([icon, id, name, hidden, hidden_by_user])
         return model
 
     def _get_icon_for_node_class(self, node_class):

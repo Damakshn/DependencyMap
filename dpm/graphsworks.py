@@ -23,6 +23,8 @@ import settings
 """
 
 # ToDo сделать послойную загрузку зависимостей вместо повершинной
+# ToDo придумать, что делать со спрятанными вершинами при подгрузке зависимостей
+# ToDo настройки визуализации в config.json
 
 class DpmGraph:
 
@@ -35,10 +37,14 @@ class DpmGraph:
         self.session = session
         self.pov_id = pov_node.id
         if nx_graph is None:
+            # nx_graph - основной граф, отражающий реальную структуру зависимостей
             self.nx_graph = nx.MultiDiGraph()
+            # proxy_graph - заместитель для отображения
+            self.proxy_graph = nx.MultiDiGraph()
             self._add_nx_node_from_model(pov_node)
         else:
             self.nx_graph = nx_graph
+            self.proxy_graph = self.nx_graph.copy()
         self.levels_up = 0
         self.levels_down = 0
         self.reached_bottom_limit = False
@@ -157,7 +163,7 @@ class DpmGraph:
                 digging_failed.append(self._check_node_is_peripheral(child.id))
             # присоединяем дочернюю вершину к родительской, создавая ребро графа для каждой операции
             for attr in edge_attrs:
-                self.nx_graph.add_edge(node.id, child.id, **{attr: True})
+                self._add_edge(node, child, attr)
         return all(digging_failed)
 
     def _explore_upper_nodes(self, node, levels_counter):
@@ -187,7 +193,7 @@ class DpmGraph:
                 rising_failed.append(self._check_node_is_peripheral(parent.id))
             # присоединяем родительскую вершину к дочерней, создавая ребро графа для каждой операции
             for attr in edge_attrs:
-                self.nx_graph.add_edge(parent.id, node.id, **{attr: True})
+                self._add_edge(parent, node, attr)
         return all(rising_failed)
     
     def _set_node_as_peripheral(self, node_id):
@@ -201,7 +207,26 @@ class DpmGraph:
         Добавляет в граф новую вершину, беря данные из её orm-модели.
         Поскольку набор атрибутов вершин может меняться, эта операция вынесена в отдельный метод.
         """
-        self.nx_graph.add_node(model.id, label=model.label, node_class=model.__class__.__name__, id=model.id, hidden=False, peripheral=False)
+        self.nx_graph.add_node(
+            model.id,
+            label=model.label,
+            node_class=model.__class__.__name__,
+            id=model.id,
+            hidden=False,
+            hidden_by_user=False,
+            peripheral=False
+        )
+        self.proxy_graph.add_node(
+            model.id,
+            label=model.label,
+            node_class=model.__class__.__name__,
+            id=model.id,
+            hidden=False
+        )
+    
+    def _add_edge(self, source, dest, attr):
+        self.nx_graph.add_edge(source.id, dest.id, **{attr: True})
+        self.proxy_graph.add_edge(source.id, dest.id, **{attr: True})
 
     def _recalc(self):
         """
@@ -212,6 +237,32 @@ class DpmGraph:
 
         self.levels_down = max([length for length in path_down.values()])
         self.levels_up = max([length for length in path_up.values()])
+    
+    def _purge_proxy_graph(self):
+        """
+        Вычищает из подставного графа все скрытые вершины и все вершины,
+        которые после этого повисают без связи с точкой отсчёта.
+        """
+        hidden_nodes = [node for node in self.proxy_graph.node if self.proxy_graph.node[node]["hidden"]]
+        for node in hidden_nodes:
+            self.proxy_graph.remove_node(node)
+        for comp in list(nx.weakly_connected_components(self.proxy_graph)):
+            if not self.pov_id in comp:
+                for node in comp:
+                    self.proxy_graph.remove_node(node)
+    
+    def hide_node(self, node_id):
+        self.nx_graph.node[node_id]["hidden"] = True
+        self.nx_graph.node[node_id]["hidden_by_user"] = True
+        self.proxy_graph.node[node_id]["hidden"] = True
+        self._purge_proxy_graph()
+    
+    def show_node(self, node_id):
+        self.nx_graph.node[node_id]["hidden"] = False
+        self.nx_graph.node[node_id]["hidden_by_user"] = False
+
+        self.proxy_graph = self.nx_graph.copy()
+        self._purge_proxy_graph()
 
     def show(self):
         """
@@ -219,25 +270,25 @@ class DpmGraph:
         """
         # красивая визуализация http://jonathansoma.com/lede/algorithms-2017/classes/networks/networkx-graphs-from-source-target-dataframe/
         config = settings.visualization
-        pos = nx.spring_layout(self.nx_graph, iterations=150)
+        pos = nx.spring_layout(self.proxy_graph, iterations=150)
         for class_name in config["nodes"]:
             nx.draw_networkx_nodes(
-                self.nx_graph, 
+                self.proxy_graph, 
                 pos, 
-                [n for n in self.nx_graph.node if self.nx_graph.node[n]["node_class"]==class_name], 
+                [n for n in self.proxy_graph.node if self.proxy_graph.node[n]["node_class"]==class_name], 
                 **config["nodes"][class_name]
             )
         for operation in config["edges"]:
             nx.draw_networkx_edges(
-                self.nx_graph, 
+                self.proxy_graph, 
                 pos, 
-                [e for e in self.nx_graph.edges if self.nx_graph.adj[e[0]][e[1]][0].get(operation)==True], 
+                [e for e in self.proxy_graph.edges if self.proxy_graph.adj[e[0]][e[1]][0].get(operation)==True], 
                 **config["edges"][operation]
             )
         nx.draw_networkx_labels(
-            self.nx_graph, 
+            self.proxy_graph, 
             pos, 
-            {n:self.nx_graph.node[n]["label"] for n in self.nx_graph.node}, 
+            {n:self.proxy_graph.node[n]["label"] for n in self.proxy_graph.node}, 
             font_size=6
         )
 
