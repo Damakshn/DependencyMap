@@ -7,6 +7,7 @@ import os
 import settings
 from dpm.graphsworks import DpmGraph
 from .collection import IconCollection
+from .historyPoint import HistoryPoint
 
 
 class BrowseGraphWidget(BrowseWidget):
@@ -20,13 +21,13 @@ class BrowseGraphWidget(BrowseWidget):
     # ToDo зависимость модели от чекбокса группировки
     # ToDo узнать, можно ли добавить зум и другие плюшки
     # ToDo надо увеличить размер области рисования, чтобы она занимала всё окно
-    # ToDo создать класс HistoryPoint для описания элементов pov_history
     # ToDo создать самодельный класс модели данных, чтобы не перекрашивать строки руками
     # ToDo True и пустая строка в ячейке - слишком костыльное решение
+    # ToDo глючит количество объектов в списке при скрытии\показе вершины
 
     _table_columns = [
         {"header": "Тип объекта", "width": 35, "hidden": False},
-        {"header": "ID", "width": 100, "hidden": True},
+        {"header": "ID", "width": 100, "hidden": False},
         {"header": "Имя", "width": 400, "hidden": False},
         {"header": "Скрыто", "width": 100, "hidden": True},
         {"header": "Скрыто пользователем", "width": 100, "hidden": True},
@@ -225,6 +226,7 @@ class BrowseGraphWidget(BrowseWidget):
         """
         self.table_view.setModel(model)
         self.table_view.horizontalHeader().hide()
+        self.table_view.verticalHeader().hide()
         for column in range(len(self._table_columns)):
             self.table_view.setColumnWidth(column, self._table_columns[column]["width"])
             self.table_view.setColumnHidden(column, self._table_columns[column]["hidden"])
@@ -242,27 +244,23 @@ class BrowseGraphWidget(BrowseWidget):
         из атрибутов графа и выводит граф в области для отображения.
         """
         history_point = self.pov_history[self.current_history_pos]
-        current_graph = history_point["graph"]
-        self._set_table_model(history_point["table_model"])
-        self._set_tree_model(history_point["tree_model"])
+        self._set_table_model(history_point.table_model)
+        self._set_tree_model(history_point.tree_model)
+        self.chb_grouping.setChecked(history_point.grouping)
 
         # считываем из текущего графа параметры загрузки зависимостей
         # и ставим их в элементы управления на форме
-        self.chb_down.setChecked(current_graph.reached_bottom_limit)
-        self.chb_up.setChecked(current_graph.reached_upper_limit)
-        self.spb_down.setValue(current_graph.levels_down)
-        self.spb_up.setValue(current_graph.levels_up)
+        self.chb_down.setChecked(history_point.reached_bottom_limit)
+        self.chb_up.setChecked(history_point.reached_upper_limit)
+        self.spb_down.setValue(history_point.levels_down)
+        self.spb_up.setValue(history_point.levels_up)
         # количество объектов (под списком)
-        self.number_of_nodes.setText(f"Объектов: {history_point['table_model'].rowCount()}")
+        self.number_of_nodes.setText(f"Объектов: {history_point.number_of_nodes_in_list}")
         # иконка pov-вершины
         self.pov_icon.setPixmap(
-            IconCollection.get_pixmap_for_node_class(
-                current_graph[current_graph.pov_id]["node_class"]
-            )
+            IconCollection.get_pixmap_for_node_class(history_point.pov_node_class)
         )
-        self.pov_label.setText(current_graph[current_graph.pov_id]["label"])
-        
-
+        self.pov_label.setText(history_point.pov_node_label)
         self._draw_current_graph()
 
     def _reload_dependencies(self):
@@ -273,10 +271,7 @@ class BrowseGraphWidget(BrowseWidget):
         levels_up = self.spb_up.value()
         levels_down = self.spb_down.value()
         history_point = self.pov_history[self.current_history_pos]
-        graph = history_point["graph"]
-        graph.load_dependencies(levels_up=levels_up, levels_down=levels_down)
-        history_point["table_model"] = self._convert_graph_to_table_model(graph)
-        history_point["tree_model"] = None
+        history_point.load_dependencies(levels_up, levels_down)
         self._read_graph_from_history()
         self._draw_current_graph()
 
@@ -285,7 +280,7 @@ class BrowseGraphWidget(BrowseWidget):
         Отображает текущий граф в области для рисования.
         """
         self.figure.clf()
-        self.pov_history[self.current_history_pos]["graph"].show()
+        self.pov_history[self.current_history_pos].show_graph()
         self.canvas.draw_idle()
 
     def _change_pov(self, button):
@@ -317,60 +312,55 @@ class BrowseGraphWidget(BrowseWidget):
         self.pov_last.setEnabled(not_end)
 
     def _toggle_grouping(self):
-        pass
+        """
+        Переключает группировку, подменяя виджеты и устанавливая активное представление
+        """
+        if self.chb_grouping.isChecked():
+            index = self.node_list.indexOf(self.tree_view)
+        else:
+            index = self.node_list.indexOf(self.table_view)
+        self.node_list.setCurrentIndex(index)
 
     def _search_node_in_list(self):
         pass
 
-    def _make_new_pov(self):
-        print(f"make new pov")
-        # self.current_history_pos += 1
-        # self._read_graph_from_history()
-        # self._toggle_pov_navigation_buttons()
+    def _make_new_pov(self, pov_node):
+        self.observed_node = pov_node
+        new_point = HistoryPoint(self._session, pov_node, grouping=self.chb_grouping.isChecked())
+        self.pov_history.append(new_point)
+        self.current_history_pos = len(self.pov_history) - 1
+        self._toggle_pov_navigation_buttons()
+        self._set_dependencies_loading_levels()
+        self._reload_dependencies()
     
     def _hide_node(self):
-        row_num = self.table_view.selectionModel().selectedRows()[0].row()
-        model = self.table_view.model()
-        node_id = int(model.data(model.index(row_num, 1)))
-        # модифицируем модель данных, чтобы указать, что нода спрятана пользователем
-        model.setData(model.index(row_num, 3), "True")
-        model.setData(model.index(row_num, 4), "True")
-        # красим строку
-        for column in range(len(self._table_columns)):
-            model.setData(model.index(row_num, column), QtGui.QBrush(QtCore.Qt.lightGray), QtCore.Qt.BackgroundRole)
-        # прячем ноду в самом графе
-        self.pov_history[self.current_history_pos]["graph"].hide_node(node_id)
+        index = self.table_view.selectionModel().currentIndex()
+        history_point = self.pov_history[self.current_history_pos]
+        history_point.hide_node(index)
+        HIDDEN_COLUMN_INDEX = 3
+        HIDDEN_BY_USER_COLUMN_INDEX = 4
         # прячем в списке те объекты, которые были скрыты автоматически
-        nodes_to_hide = self.pov_history[self.current_history_pos]["graph"].auto_hidden_nodes
+        model = self._active_view.model()
         for row in range(model.rowCount()):
-            if int(model.index(row, 1).data()) in nodes_to_hide:
-                model.setData(model.index(row, 3), "True")
+            if bool(model.index(row, HIDDEN_COLUMN_INDEX).data()) and not bool(model.index(row, HIDDEN_BY_USER_COLUMN_INDEX).data()):
                 self.table_view.setRowHidden(row, True)
-        nodes_total = self.pov_history[self.current_history_pos]["graph"].number_of_subordinate_nodes
-        self.number_of_nodes.setText(f"Объектов: {nodes_total - len(nodes_to_hide)}")
+        self.number_of_nodes.setText(f"Объектов: {history_point.number_of_nodes_in_list}")
         # перерисовываем граф
         self._draw_current_graph()
     
     def _show_node(self):
-        row_num = self.table_view.selectionModel().selectedRows()[0].row()
-        model = self.table_view.model()
-        node_id = int(model.data(model.index(row_num, 1)))
-        # модифицируем модель данных, чтобы указать, что нода снова видима
-        model.setData(model.index(row_num, 3), "")
-        model.setData(model.index(row_num, 4), "")
-        # красим строку обратно
-        for column in range(len(self._table_columns)):
-            model.setData(model.index(row_num, column), QtGui.QBrush(QtCore.Qt.white), QtCore.Qt.BackgroundRole)
-        # обрабатываем граф
-        self.pov_history[self.current_history_pos]["graph"].show_node(node_id)
+        index = self.table_view.selectionModel().currentIndex()
+        history_point = self.pov_history[self.current_history_pos]
+        history_point.show_node(index)
+        HIDDEN_COLUMN_INDEX = 3
+        HIDDEN_BY_USER_COLUMN_INDEX = 4
         # показываем в списке те ноды, которые должны стать видимыми
-        nodes_to_hide = self.pov_history[self.current_history_pos]["graph"].auto_hidden_nodes
+        model = self._active_view.model()
         for row in range(model.rowCount()):
-            if int(model.index(row, 1).data()) not in nodes_to_hide:
-                model.setData(model.index(row, 3), "")
+            hidden_auto = bool(model.index(row, HIDDEN_COLUMN_INDEX).data()) and not bool(model.index(row, HIDDEN_BY_USER_COLUMN_INDEX).data())
+            if not hidden_auto:
                 self.table_view.setRowHidden(row, False)
-        nodes_total = self.pov_history[self.current_history_pos]["graph"].number_of_subordinate_nodes
-        self.number_of_nodes.setText(f"Объектов: {nodes_total - len(nodes_to_hide)}")
+        self.number_of_nodes.setText(f"Объектов: {history_point.number_of_nodes_in_list}")
         # перерисовываем граф
         self._draw_current_graph()
 
@@ -415,6 +405,13 @@ class BrowseGraphWidget(BrowseWidget):
         """
         pass
     
+    @property
+    def _active_view(self):
+        if self.chb_grouping.isChecked():
+            return self.tree_view
+        else:
+            return self.table_view
+    
     def _convert_graph_to_table_model(self, graph):
         """
         Конвертирует граф в табличную модель для виджета.
@@ -443,17 +440,6 @@ class BrowseGraphWidget(BrowseWidget):
     def query_node_data(self, node):
         if self._session is None:
             return
-        self.observed_node = node
-        new_graph = DpmGraph(self._session, node)
+        self._make_new_pov(node)
         
-        self.pov_history.append(
-            {
-                "graph": new_graph,
-                "table_model": None,
-                "tree_model": None
-            }
-        )
-        self._toggle_pov_navigation_buttons()
-        self._set_dependencies_loading_levels()
-        self._reload_dependencies()
 
