@@ -32,6 +32,7 @@ class IconCollection:
             "browse_graph":  QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/network48.png")),
             "new_pov": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/new_pov.png")),
             "invisible": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/invisible.png")),
+            "visible": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/visible.png")),
         }
 
         IconCollection.pixmaps = {

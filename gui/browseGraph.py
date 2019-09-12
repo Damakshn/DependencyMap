@@ -9,7 +9,6 @@ from dpm.graphsworks import DpmGraph
 from .collection import IconCollection
 
 
-
 class BrowseGraphWidget(BrowseWidget):
     """
     Большой виджет, отвечающий за работу с графом зависимостей.
@@ -17,14 +16,13 @@ class BrowseGraphWidget(BrowseWidget):
     # ToDo древовидная модель
     # ToDo событие выбора ноды в списке и его передача наверх
     # ToDo переход к новой точке отсчёта
-    # ToDo скрытые пользователем объекты показывать в таблице, выделенные другим цветом, объекты, скрытые автоматически в таблице не выводятся
-    # ToDo при щелчке на скрытых пользователем объектах в таблице пункт контекстного меню "Скрыть" должен быть заменён на "Показать"
-    # ToDo счётчик количества объектов под таблицей должен показывать кол-во видимых объектов
     # ToDo экспорт графа в другие форматы
     # ToDo зависимость модели от чекбокса группировки
     # ToDo узнать, можно ли добавить зум и другие плюшки
     # ToDo надо увеличить размер области рисования, чтобы она занимала всё окно
     # ToDo создать класс HistoryPoint для описания элементов pov_history
+    # ToDo создать самодельный класс модели данных, чтобы не перекрашивать строки руками
+    # ToDo True и пустая строка в ячейке - слишком костыльное решение
 
     _table_columns = [
         {"header": "Тип объекта", "width": 35, "hidden": False},
@@ -121,6 +119,9 @@ class BrowseGraphWidget(BrowseWidget):
         self.node_action_hide = QtWidgets.QAction(IconCollection.icons["invisible"], "Скрыть")
         self.node_action_hide.triggered.connect(self._hide_node)
 
+        self.node_action_show = QtWidgets.QAction(IconCollection.icons["visible"], "Показать")
+        self.node_action_show.triggered.connect(self._show_node)
+
     def _init_dependencies_panel(self):
         # панель управления подгрузкой зависимостей
         grid = QtWidgets.QGridLayout()
@@ -180,8 +181,18 @@ class BrowseGraphWidget(BrowseWidget):
         self.control_panel.layout().addWidget(panel)
     
     def _show_node_context_menu(self, position):
+        self.node_context_menu.clear()
         self.node_context_menu.addAction(self.node_action_set_pov)
-        self.node_context_menu.addAction(self.node_action_hide)
+        # если нода видимая, то добавляем в меню пункт "Скрыть"
+        # иначе добавляем пункт "Показать"
+        row_num = self.table_view.selectionModel().selectedRows()[0].row()
+        model = self.table_view.model()
+        hidden_by_user = bool(model.data(model.index(row_num, 4)))
+        if hidden_by_user:
+            self.node_context_menu.addAction(self.node_action_show)
+        else:
+            self.node_context_menu.addAction(self.node_action_hide)
+        
         self.node_context_menu.exec_(self.table_view.viewport().mapToGlobal(position))
 
     def _init_node_list(self):
@@ -242,7 +253,7 @@ class BrowseGraphWidget(BrowseWidget):
         self.spb_down.setValue(current_graph.levels_down)
         self.spb_up.setValue(current_graph.levels_up)
         # количество объектов (под списком)
-        self.number_of_nodes.setText(f"Объектов: {history_point['graph'].number_of_subordinate_nodes}")
+        self.number_of_nodes.setText(f"Объектов: {history_point['table_model'].rowCount()}")
         # иконка pov-вершины
         self.pov_icon.setPixmap(
             IconCollection.get_pixmap_for_node_class(
@@ -321,8 +332,46 @@ class BrowseGraphWidget(BrowseWidget):
         row_num = self.table_view.selectionModel().selectedRows()[0].row()
         model = self.table_view.model()
         node_id = int(model.data(model.index(row_num, 1)))
-        #print(bool(model.index(row_num, 3).data()))
+        # модифицируем модель данных, чтобы указать, что нода спрятана пользователем
+        model.setData(model.index(row_num, 3), "True")
+        model.setData(model.index(row_num, 4), "True")
+        # красим строку
+        for column in range(len(self._table_columns)):
+            model.setData(model.index(row_num, column), QtGui.QBrush(QtCore.Qt.lightGray), QtCore.Qt.BackgroundRole)
+        # прячем ноду в самом графе
         self.pov_history[self.current_history_pos]["graph"].hide_node(node_id)
+        # прячем в списке те объекты, которые были скрыты автоматически
+        nodes_to_hide = self.pov_history[self.current_history_pos]["graph"].auto_hidden_nodes
+        for row in range(model.rowCount()):
+            if int(model.index(row, 1).data()) in nodes_to_hide:
+                model.setData(model.index(row, 3), "True")
+                self.table_view.setRowHidden(row, True)
+        nodes_total = self.pov_history[self.current_history_pos]["graph"].number_of_subordinate_nodes
+        self.number_of_nodes.setText(f"Объектов: {nodes_total - len(nodes_to_hide)}")
+        # перерисовываем граф
+        self._draw_current_graph()
+    
+    def _show_node(self):
+        row_num = self.table_view.selectionModel().selectedRows()[0].row()
+        model = self.table_view.model()
+        node_id = int(model.data(model.index(row_num, 1)))
+        # модифицируем модель данных, чтобы указать, что нода снова видима
+        model.setData(model.index(row_num, 3), "")
+        model.setData(model.index(row_num, 4), "")
+        # красим строку обратно
+        for column in range(len(self._table_columns)):
+            model.setData(model.index(row_num, column), QtGui.QBrush(QtCore.Qt.white), QtCore.Qt.BackgroundRole)
+        # обрабатываем граф
+        self.pov_history[self.current_history_pos]["graph"].show_node(node_id)
+        # показываем в списке те ноды, которые должны стать видимыми
+        nodes_to_hide = self.pov_history[self.current_history_pos]["graph"].auto_hidden_nodes
+        for row in range(model.rowCount()):
+            if int(model.index(row, 1).data()) not in nodes_to_hide:
+                model.setData(model.index(row, 3), "")
+                self.table_view.setRowHidden(row, False)
+        nodes_total = self.pov_history[self.current_history_pos]["graph"].number_of_subordinate_nodes
+        self.number_of_nodes.setText(f"Объектов: {nodes_total - len(nodes_to_hide)}")
+        # перерисовываем граф
         self._draw_current_graph()
 
     def _set_dependencies_loading_levels(self):
@@ -408,5 +457,3 @@ class BrowseGraphWidget(BrowseWidget):
         self._set_dependencies_loading_levels()
         self._reload_dependencies()
 
-class BrowseGraphHistoryPoint:
-    pass

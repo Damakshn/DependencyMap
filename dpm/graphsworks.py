@@ -238,6 +238,16 @@ class DpmGraph:
         self.levels_down = max([length for length in path_down.values()])
         self.levels_up = max([length for length in path_up.values()])
     
+    def _mark_hidden_nodes_after_purging(self):
+        """
+        Сопоставляет основной и замещающий граф, помечает ноды первого, отсутствующие
+        во втором как скрытые. Атрибут hidden_by_user не ставится, чтобы указать,
+        что эти ноды скрыты автоматически.
+        """
+        for node in self.nx_graph.node:
+            if not node in self.proxy_graph.node:
+                self.nx_graph.node[node]["hidden"] = True
+    
     def _purge_proxy_graph(self):
         """
         Вычищает из подставного графа все скрытые вершины и все вершины,
@@ -250,17 +260,19 @@ class DpmGraph:
             if not self.pov_id in comp:
                 for node in comp:
                     self.proxy_graph.remove_node(node)
+        self._mark_hidden_nodes_after_purging()
+    
     
     def hide_node(self, node_id):
         self.nx_graph.node[node_id]["hidden"] = True
         self.nx_graph.node[node_id]["hidden_by_user"] = True
         self.proxy_graph.node[node_id]["hidden"] = True
         self._purge_proxy_graph()
+
     
     def show_node(self, node_id):
         self.nx_graph.node[node_id]["hidden"] = False
         self.nx_graph.node[node_id]["hidden_by_user"] = False
-
         self.proxy_graph = self.nx_graph.copy()
         self._purge_proxy_graph()
 
@@ -270,7 +282,7 @@ class DpmGraph:
         """
         # красивая визуализация http://jonathansoma.com/lede/algorithms-2017/classes/networks/networkx-graphs-from-source-target-dataframe/
         config = settings.visualization
-        pos = nx.spring_layout(self.proxy_graph, iterations=150)
+        pos = nx.spring_layout(self.proxy_graph, iterations=100)
         for class_name in config["nodes"]:
             nx.draw_networkx_nodes(
                 self.proxy_graph, 
@@ -304,5 +316,9 @@ class DpmGraph:
         """
         return len(self.nx_graph.nodes())-1
     
+    @property
+    def auto_hidden_nodes(self):
+        return [node for node in self.nx_graph.node if self.nx_graph.node[node]["hidden"] and not self.nx_graph.node[node]["hidden_by_user"]]
+
     def __getitem__(self, key):
         return self.nx_graph.node[key]
