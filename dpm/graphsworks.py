@@ -1,6 +1,9 @@
+import itertools
 import networkx as nx
 from .models import Node
 import settings
+from enum import IntEnum, auto
+
 
 """
 Этот модуль запрашивает информацию о зависимостях объектов из базы и формирует
@@ -26,6 +29,13 @@ import settings
 # ToDo придумать, что делать со спрятанными вершинами при подгрузке зависимостей
 # ToDo настройки визуализации в config.json
 
+class NodeStatus(IntEnum):
+    NEW = 0
+    VISIBLE = 1
+    ROLLED_UP = 2
+    AUTO_HIDDEN = 3
+
+
 class DpmGraph:
 
     """
@@ -49,13 +59,6 @@ class DpmGraph:
         self.levels_down = 0
         self.reached_bottom_limit = False
         self.reached_upper_limit = False
-
-    def hide_element(self, node_id):
-        """
-        Помечает вершину с id=node_id как hidden=True, а также все вершины, которые достижимы
-        из POV только через эту вершину.
-        """
-        pass
 
     def load_dependencies(self, levels_up=0, levels_down=0):
         """
@@ -85,6 +88,7 @@ class DpmGraph:
             self.reached_bottom_limit = False
 
         self._recalc()
+        self._rollup_inner_contour()
 
     def _cut_upper_levels(self, limit):
         """
@@ -212,8 +216,7 @@ class DpmGraph:
             label=model.label,
             node_class=model.__class__.__name__,
             id=model.id,
-            hidden=False,
-            hidden_by_user=False,
+            status=NodeStatus.NEW,
             peripheral=False
         )
         self.proxy_graph.add_node(
@@ -221,7 +224,7 @@ class DpmGraph:
             label=model.label,
             node_class=model.__class__.__name__,
             id=model.id,
-            hidden=False
+            status=NodeStatus.NEW
         )
     
     def _add_edge(self, source, dest, attr):
@@ -238,43 +241,47 @@ class DpmGraph:
         self.levels_down = max([length for length in path_down.values()])
         self.levels_up = max([length for length in path_up.values()])
     
-    def _mark_hidden_nodes_after_purging(self):
+    def _rollup_inner_contour(self):
         """
-        Сопоставляет основной и замещающий граф, помечает ноды первого, отсутствующие
-        во втором как скрытые. Атрибут hidden_by_user не ставится, чтобы указать,
-        что эти ноды скрыты автоматически.
+        Помечает все вновь загруженные вершины, непосредственно примыкающие к точке отсчёта, 
+        как свёрнутые и убирает их из подставного графа.
         """
-        for node in self.nx_graph.node:
-            if not node in self.proxy_graph.node:
-                self.nx_graph.node[node]["hidden"] = True
+        for node in itertools.chain(self.nx_graph.predecessors(self.pov_id), self.nx_graph.successors(self.pov_id)):
+            if self.nx_graph.node[node]["status"] == NodeStatus.NEW:
+                self.nx_graph.node[node]["status"] = NodeStatus.ROLLED_UP
+                self.proxy_graph.node[node]["status"] = NodeStatus.ROLLED_UP
+        self._prepare_graph_for_drawing()
     
-    def _purge_proxy_graph(self):
+    def _prepare_graph_for_drawing(self):
         """
         Вычищает из подставного графа все скрытые вершины и все вершины,
         которые после этого повисают без связи с точкой отсчёта.
         """
-        hidden_nodes = [node for node in self.proxy_graph.node if self.proxy_graph.node[node]["hidden"]]
-        for node in hidden_nodes:
+        rolled_up_nodes = [node for node in self.proxy_graph.node if self.proxy_graph.node[node]["status"] == NodeStatus.ROLLED_UP]
+        for node in rolled_up_nodes:
             self.proxy_graph.remove_node(node)
+        # находим компоненты связности и удаляем их все, кроме той в которой находится точка отсчёта
         for comp in list(nx.weakly_connected_components(self.proxy_graph)):
             if not self.pov_id in comp:
                 for node in comp:
                     self.proxy_graph.remove_node(node)
-        self._mark_hidden_nodes_after_purging()
-    
-    
-    def hide_node(self, node_id):
-        self.nx_graph.node[node_id]["hidden"] = True
-        self.nx_graph.node[node_id]["hidden_by_user"] = True
-        self.proxy_graph.node[node_id]["hidden"] = True
-        self._purge_proxy_graph()
+        # Сопоставляем основной и замещающий граф, помечает несвёрнутые ноды первого, отсутствующие
+        # во втором как скрытые.
+        for node in self.nx_graph.node:
+            if not node in self.proxy_graph.node and self.nx_graph.node[node]["status"] != NodeStatus.ROLLED_UP:
+                self.nx_graph.node[node]["status"] = NodeStatus.AUTO_HIDDEN
+            elif node in self.proxy_graph.node:
+                self.nx_graph.node[node]["status"] = NodeStatus.VISIBLE
 
+    def hide_node(self, node_id):
+        self.nx_graph.node[node_id]["status"] = NodeStatus.ROLLED_UP
+        self.proxy_graph.node[node_id]["status"] = NodeStatus.ROLLED_UP
+        self._prepare_graph_for_drawing()
     
     def show_node(self, node_id):
-        self.nx_graph.node[node_id]["hidden"] = False
-        self.nx_graph.node[node_id]["hidden_by_user"] = False
+        self.nx_graph.node[node_id]["status"] = NodeStatus.VISIBLE
         self.proxy_graph = self.nx_graph.copy()
-        self._purge_proxy_graph()
+        self._prepare_graph_for_drawing()
 
     def show(self):
         """
@@ -303,7 +310,6 @@ class DpmGraph:
             {n:self.proxy_graph.node[n]["label"] for n in self.proxy_graph.node}, 
             font_size=6
         )
-
     
     @property
     def nodes(self):
@@ -318,7 +324,11 @@ class DpmGraph:
     
     @property
     def auto_hidden_nodes(self):
-        return [node for node in self.nx_graph.node if self.nx_graph.node[node]["hidden"] and not self.nx_graph.node[node]["hidden_by_user"]]
+        return [
+            node 
+            for node in self.nx_graph.node 
+            if self.nx_graph.node[node]["status"] == NodeStatus.AUTO_HIDDEN
+        ]
 
     def __getitem__(self, key):
         return self.nx_graph.node[key]

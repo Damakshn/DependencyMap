@@ -5,7 +5,7 @@ from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as Navigatio
 from .browse_widget import BrowseWidget
 import os
 import settings
-from dpm.graphsworks import DpmGraph
+from dpm.graphsworks import DpmGraph, NodeStatus
 from .collection import IconCollection
 from .historyPoint import HistoryPoint
 
@@ -14,11 +14,13 @@ class BrowseGraphWidget(BrowseWidget):
     """
     Большой виджет, отвечающий за работу с графом зависимостей.
     """
+    # почему-то при показе формы скрытые ноды не закрашены в таблице, хотя всё остальное на месте
+    # ToDo проверить подгрузку зависимостей и починить, если сломалось
+    # ToDo убрать настройки колонок куда-нибудь
     # ToDo древовидная модель
     # ToDo событие выбора ноды в списке и его передача наверх
     # ToDo переход к новой точке отсчёта
     # ToDo экспорт графа в другие форматы
-    # ToDo зависимость модели от чекбокса группировки
     # ToDo узнать, можно ли добавить зум и другие плюшки
     # ToDo надо увеличить размер области рисования, чтобы она занимала всё окно
     # ToDo создать самодельный класс модели данных, чтобы не перекрашивать строки руками
@@ -27,10 +29,9 @@ class BrowseGraphWidget(BrowseWidget):
 
     _table_columns = [
         {"header": "Тип объекта", "width": 35, "hidden": False},
-        {"header": "ID", "width": 100, "hidden": False},
+        {"header": "ID", "width": 100, "hidden": True},
         {"header": "Имя", "width": 400, "hidden": False},
-        {"header": "Скрыто", "width": 100, "hidden": True},
-        {"header": "Скрыто пользователем", "width": 100, "hidden": True},
+        {"header": "Статус", "width": 100, "hidden": False},
     ]
 
     def __init__(self, *args, **kwargs):
@@ -188,8 +189,8 @@ class BrowseGraphWidget(BrowseWidget):
         # иначе добавляем пункт "Показать"
         row_num = self.table_view.selectionModel().selectedRows()[0].row()
         model = self.table_view.model()
-        hidden_by_user = bool(model.data(model.index(row_num, 4)))
-        if hidden_by_user:
+        status = int(model.data(model.index(row_num, 3)))
+        if status == NodeStatus.ROLLED_UP:
             self.node_context_menu.addAction(self.node_action_show)
         else:
             self.node_context_menu.addAction(self.node_action_hide)
@@ -238,6 +239,17 @@ class BrowseGraphWidget(BrowseWidget):
         self.tree_view.setModel(model)
         self.tree_view.header().hide()
     
+    def _prepare_view(self):
+        STATUS_COLUMN_INDEX = 3
+        # прячем в списке те объекты, которые были скрыты автоматически
+        model = self._active_view.model()
+        for row in range(model.rowCount()):
+            self.table_view.setRowHidden(
+                row, 
+                int(model.index(row, STATUS_COLUMN_INDEX).data()) == NodeStatus.AUTO_HIDDEN
+            )
+        self.number_of_nodes.setText(f"Объектов: {self.pov_history[self.current_history_pos].number_of_nodes_in_list}")
+    
     def _read_graph_from_history(self):
         """
         Читает граф из текущей позиции в истории, заполняет значения виджетов значениями
@@ -247,7 +259,7 @@ class BrowseGraphWidget(BrowseWidget):
         self._set_table_model(history_point.table_model)
         self._set_tree_model(history_point.tree_model)
         self.chb_grouping.setChecked(history_point.grouping)
-
+        self._prepare_view()
         # считываем из текущего графа параметры загрузки зависимостей
         # и ставим их в элементы управления на форме
         self.chb_down.setChecked(history_point.reached_bottom_limit)
@@ -337,31 +349,14 @@ class BrowseGraphWidget(BrowseWidget):
         index = self.table_view.selectionModel().currentIndex()
         history_point = self.pov_history[self.current_history_pos]
         history_point.hide_node(index)
-        HIDDEN_COLUMN_INDEX = 3
-        HIDDEN_BY_USER_COLUMN_INDEX = 4
-        # прячем в списке те объекты, которые были скрыты автоматически
-        model = self._active_view.model()
-        for row in range(model.rowCount()):
-            if bool(model.index(row, HIDDEN_COLUMN_INDEX).data()) and not bool(model.index(row, HIDDEN_BY_USER_COLUMN_INDEX).data()):
-                self.table_view.setRowHidden(row, True)
-        self.number_of_nodes.setText(f"Объектов: {history_point.number_of_nodes_in_list}")
-        # перерисовываем граф
+        self._prepare_view()
         self._draw_current_graph()
     
     def _show_node(self):
         index = self.table_view.selectionModel().currentIndex()
         history_point = self.pov_history[self.current_history_pos]
         history_point.show_node(index)
-        HIDDEN_COLUMN_INDEX = 3
-        HIDDEN_BY_USER_COLUMN_INDEX = 4
-        # показываем в списке те ноды, которые должны стать видимыми
-        model = self._active_view.model()
-        for row in range(model.rowCount()):
-            hidden_auto = bool(model.index(row, HIDDEN_COLUMN_INDEX).data()) and not bool(model.index(row, HIDDEN_BY_USER_COLUMN_INDEX).data())
-            if not hidden_auto:
-                self.table_view.setRowHidden(row, False)
-        self.number_of_nodes.setText(f"Объектов: {history_point.number_of_nodes_in_list}")
-        # перерисовываем граф
+        self._prepare_view()
         self._draw_current_graph()
 
     def _set_dependencies_loading_levels(self):
@@ -412,22 +407,6 @@ class BrowseGraphWidget(BrowseWidget):
         else:
             return self.table_view
     
-    def _convert_graph_to_table_model(self, graph):
-        """
-        Конвертирует граф в табличную модель для виджета.
-        """
-        model = QtGui.QStandardItemModel()
-        model.setHorizontalHeaderLabels([c["header"] for c in self._table_columns])
-        for node in graph.nodes:
-            if node == graph.pov_id:
-                continue
-            icon = QtGui.QStandardItem(self._get_icon_for_node_class(graph[node]["node_class"]), "")
-            id = QtGui.QStandardItem(str(graph[node]["id"]))
-            name = QtGui.QStandardItem(graph[node]["label"])
-            hidden = QtGui.QStandardItem("True" if graph[node]["hidden"] else "")
-            hidden_by_user = QtGui.QStandardItem("True" if graph[node]["hidden_by_user"] else "")
-            model.appendRow([icon, id, name, hidden, hidden_by_user])
-        return model
 
     def _get_icon_for_node_class(self, node_class):
         """
@@ -441,5 +420,3 @@ class BrowseGraphWidget(BrowseWidget):
         if self._session is None:
             return
         self._make_new_pov(node)
-        
-

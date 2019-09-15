@@ -1,12 +1,15 @@
-from dpm.graphsworks import DpmGraph
+from dpm.graphsworks import DpmGraph, NodeStatus
 from PySide2 import QtWidgets, QtGui, QtCore
 from .collection import IconCollection
+
 
 class HistoryPoint:
     """
     Класс-обёртка для графа зависимостей и моделей данных PyQt,
     представляющих его в виде таблицы и дерева.
     """
+
+    STATUS_COLUMN_INDEX = 3
     
     def __init__(self, session, initial_node, grouping=False):
         self.graph = DpmGraph(session, initial_node)
@@ -23,8 +26,7 @@ class HistoryPoint:
             {"header": "Тип объекта", "width": 35, "hidden": False},
             {"header": "ID", "width": 100, "hidden": True},
             {"header": "Имя", "width": 400, "hidden": False},
-            {"header": "Скрыто", "width": 100, "hidden": True},
-            {"header": "Скрыто пользователем", "width": 100, "hidden": True},
+            {"header": "Статус", "width": 100, "hidden": True},
         ]
     
     def load_dependencies(self, up, down):
@@ -42,15 +44,9 @@ class HistoryPoint:
         row_num = model_index.row()
         node_id = int(self.active_model.data(self.active_model.index(row_num, 1)))
         # модифицируем модель данных, чтобы указать, что нода спрятана пользователем
-        self.active_model.setData(self.active_model.index(row_num, 3), "True")
-        self.active_model.setData(self.active_model.index(row_num, 4), "True")
+        self.active_model.setData(self.active_model.index(row_num, self.STATUS_COLUMN_INDEX), str(int(NodeStatus.ROLLED_UP)))
         # красим строку
-        for column in range(len(HistoryPoint.table_columns())):
-            self.active_model.setData(
-                self.active_model.index(row_num, column), 
-                QtGui.QBrush(QtCore.Qt.lightGray), 
-                QtCore.Qt.BackgroundRole
-            )
+        self._paint_row_as_rolled_up(row_num)
         # прячем ноду в самом графе
         self.graph.hide_node(node_id)
         
@@ -58,30 +54,28 @@ class HistoryPoint:
         nodes_to_hide = self.graph.auto_hidden_nodes
         for row in range(self.active_model.rowCount()):
             if int(self.active_model.index(row, 1).data()) in nodes_to_hide:
-                self.active_model.setData(self.active_model.index(row, 3), "True")
+                self.active_model.setData(self.active_model.index(row, self.STATUS_COLUMN_INDEX), str(int(NodeStatus.AUTO_HIDDEN)))
     
     def show_node(self, model_index):
         row_num = model_index.row()
         node_id = int(self.active_model.data(self.active_model.index(row_num, 1)))
-        
         # модифицируем модель данных, чтобы указать, что нода снова видима
-        self.active_model.setData(self.active_model.index(row_num, 3), "")
-        self.active_model.setData(self.active_model.index(row_num, 4), "")
+        self.active_model.setData(self.active_model.index(row_num, self.STATUS_COLUMN_INDEX), str(int(NodeStatus.VISIBLE)))
         # красим строку обратно
-        for column in range(len(HistoryPoint.table_columns())):
-            self.active_model.setData(self.active_model.index(row_num, column), QtGui.QBrush(QtCore.Qt.white), QtCore.Qt.BackgroundRole)
+        self._paint_row_as_visible(row_num)
         # обрабатываем граф
         self.graph.show_node(node_id)
         # снимаем метку с тех вершин, которые должны стать видимыми
         nodes_to_hide = self.graph.auto_hidden_nodes
         for row in range(self.active_model.rowCount()):
-            if int(self.active_model.index(row, 1).data()) not in nodes_to_hide:
-                self.active_model.setData(self.active_model.index(row, 3), "")
+            if int(self.active_model.index(row, 1).data()) not in nodes_to_hide and int(str(self.active_model.index(row, 3).data())) != NodeStatus.ROLLED_UP:
+                self.active_model.setData(self.active_model.index(row, self.STATUS_COLUMN_INDEX), str(int(NodeStatus.VISIBLE)))
     
     def _refresh_table_model(self):
         """
         Полностью обновляет табличную модель на основе графа.
         """
+        print("_refresh_table_model")
         model = QtGui.QStandardItemModel()
         model.setHorizontalHeaderLabels([c["header"] for c in HistoryPoint.table_columns()])
         for node in self.graph.nodes:
@@ -90,9 +84,11 @@ class HistoryPoint:
             icon = QtGui.QStandardItem(IconCollection.get_icon_for_node_class(self.graph[node]["node_class"]), "")
             id = QtGui.QStandardItem(str(self.graph[node]["id"]))
             name = QtGui.QStandardItem(self.graph[node]["label"])
-            hidden = QtGui.QStandardItem("True" if self.graph[node]["hidden"] else "")
-            hidden_by_user = QtGui.QStandardItem("True" if self.graph[node]["hidden_by_user"] else "")
-            model.appendRow([icon, id, name, hidden, hidden_by_user])
+            status = QtGui.QStandardItem(str(int(self.graph[node]["status"])))
+            model.appendRow([icon, id, name, status])
+        for row in range(model.rowCount()):
+            if int(model.data(model.index(row, self.STATUS_COLUMN_INDEX))) == NodeStatus.ROLLED_UP:
+                self._paint_row_as_rolled_up(row)
         self.table_model = model
     
     def _refresh_tree_model(self):
@@ -118,6 +114,22 @@ class HistoryPoint:
         """
         pass
     
+    def _paint_row_as_rolled_up(self, row):
+        for column in range(len(HistoryPoint.table_columns())):
+            self.active_model.setData(
+                self.active_model.index(row, column), 
+                QtGui.QBrush(QtCore.Qt.lightGray),
+                QtCore.Qt.BackgroundRole
+            )
+    
+    def _paint_row_as_visible(self, row):
+        for column in range(len(HistoryPoint.table_columns())):
+            self.active_model.setData(
+                self.active_model.index(row, column), 
+                QtGui.QBrush(QtCore.Qt.white), 
+                QtCore.Qt.BackgroundRole
+            )
+
     @property
     def active_model(self):
         if self.grouping:
