@@ -75,9 +75,11 @@ class HistoryPoint:
         """
         Полностью обновляет табличную модель на основе графа.
         """
-        print("_refresh_table_model")
-        model = QtGui.QStandardItemModel()
-        model.setHorizontalHeaderLabels([c["header"] for c in HistoryPoint.table_columns()])
+        if self.table_model is None:
+            self.table_model = QtGui.QStandardItemModel()
+        else:
+            self.table_model.clear()
+        self.table_model.setHorizontalHeaderLabels([c["header"] for c in HistoryPoint.table_columns()])
         for node in self.graph.nodes:
             if node == self.graph.pov_id:
                 continue
@@ -85,11 +87,10 @@ class HistoryPoint:
             id = QtGui.QStandardItem(str(self.graph[node]["id"]))
             name = QtGui.QStandardItem(self.graph[node]["label"])
             status = QtGui.QStandardItem(str(int(self.graph[node]["status"])))
-            model.appendRow([icon, id, name, status])
-        for row in range(model.rowCount()):
-            if int(model.data(model.index(row, self.STATUS_COLUMN_INDEX))) == NodeStatus.ROLLED_UP:
+            self.table_model.appendRow([icon, id, name, status])
+        for row in range(self.table_model.rowCount()):
+            if int(self.table_model.data(self.table_model.index(row, self.STATUS_COLUMN_INDEX))) == NodeStatus.ROLLED_UP:
                 self._paint_row_as_rolled_up(row)
-        self.table_model = model
     
     def _refresh_tree_model(self):
         """

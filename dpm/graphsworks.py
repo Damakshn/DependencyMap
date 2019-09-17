@@ -49,9 +49,10 @@ class DpmGraph:
         if nx_graph is None:
             # nx_graph - основной граф, отражающий реальную структуру зависимостей
             self.nx_graph = nx.MultiDiGraph()
-            # proxy_graph - заместитель для отображения
-            self.proxy_graph = nx.MultiDiGraph()
             self._add_nx_node_from_model(pov_node)
+            # proxy_graph - заместитель для отображения
+            self.proxy_graph = self.nx_graph.copy()
+            
         else:
             self.nx_graph = nx_graph
             self.proxy_graph = self.nx_graph.copy()
@@ -86,7 +87,6 @@ class DpmGraph:
         elif levels_down < self.levels_down:
             self._cut_lower_levels(levels_down)
             self.reached_bottom_limit = False
-
         self._recalc()
         self._rollup_inner_contour()
 
@@ -97,7 +97,7 @@ class DpmGraph:
         length = dict(nx.single_target_shortest_path_length(self.nx_graph, self.pov_id))
         for node_id in length:
             if length[node_id] > limit:
-                self.nx_graph.remove(node_id)
+                self.nx_graph.remove_node(node_id)
 
     def _cut_lower_levels(self, limit):
         """
@@ -106,7 +106,7 @@ class DpmGraph:
         length = nx.single_source_shortest_path_length(self.nx_graph, self.pov_id)
         for node_id in length:
             if length[node_id] > limit:
-                self.nx_graph.remove(node_id)
+                self.nx_graph.remove_node(node_id)
 
     def _load_dependencies_up(self, levels_counter):
         """
@@ -219,17 +219,10 @@ class DpmGraph:
             status=NodeStatus.NEW,
             peripheral=False
         )
-        self.proxy_graph.add_node(
-            model.id,
-            label=model.label,
-            node_class=model.__class__.__name__,
-            id=model.id,
-            status=NodeStatus.NEW
-        )
+        
     
     def _add_edge(self, source, dest, attr):
         self.nx_graph.add_edge(source.id, dest.id, **{attr: True})
-        self.proxy_graph.add_edge(source.id, dest.id, **{attr: True})
 
     def _recalc(self):
         """
@@ -244,12 +237,11 @@ class DpmGraph:
     def _rollup_inner_contour(self):
         """
         Помечает все вновь загруженные вершины, непосредственно примыкающие к точке отсчёта, 
-        как свёрнутые и убирает их из подставного графа.
+        как свёрнутые и убирает их из подставного графа (они перестают отображаться при визуализации).
         """
         for node in itertools.chain(self.nx_graph.predecessors(self.pov_id), self.nx_graph.successors(self.pov_id)):
             if self.nx_graph.node[node]["status"] == NodeStatus.NEW:
                 self.nx_graph.node[node]["status"] = NodeStatus.ROLLED_UP
-                self.proxy_graph.node[node]["status"] = NodeStatus.ROLLED_UP
         self._prepare_graph_for_drawing()
     
     def _prepare_graph_for_drawing(self):
@@ -257,6 +249,7 @@ class DpmGraph:
         Вычищает из подставного графа все скрытые вершины и все вершины,
         которые после этого повисают без связи с точкой отсчёта.
         """
+        self.proxy_graph = self.nx_graph.copy()
         rolled_up_nodes = [node for node in self.proxy_graph.node if self.proxy_graph.node[node]["status"] == NodeStatus.ROLLED_UP]
         for node in rolled_up_nodes:
             self.proxy_graph.remove_node(node)
@@ -275,12 +268,10 @@ class DpmGraph:
 
     def hide_node(self, node_id):
         self.nx_graph.node[node_id]["status"] = NodeStatus.ROLLED_UP
-        self.proxy_graph.node[node_id]["status"] = NodeStatus.ROLLED_UP
         self._prepare_graph_for_drawing()
     
     def show_node(self, node_id):
         self.nx_graph.node[node_id]["status"] = NodeStatus.VISIBLE
-        self.proxy_graph = self.nx_graph.copy()
         self._prepare_graph_for_drawing()
 
     def show(self):

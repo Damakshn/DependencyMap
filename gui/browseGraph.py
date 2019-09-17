@@ -14,8 +14,6 @@ class BrowseGraphWidget(BrowseWidget):
     """
     Большой виджет, отвечающий за работу с графом зависимостей.
     """
-    # почему-то при показе формы скрытые ноды не закрашены в таблице, хотя всё остальное на месте
-    # ToDo проверить подгрузку зависимостей и починить, если сломалось
     # ToDo убрать настройки колонок куда-нибудь
     # ToDo древовидная модель
     # ToDo событие выбора ноды в списке и его передача наверх
@@ -23,15 +21,13 @@ class BrowseGraphWidget(BrowseWidget):
     # ToDo экспорт графа в другие форматы
     # ToDo узнать, можно ли добавить зум и другие плюшки
     # ToDo надо увеличить размер области рисования, чтобы она занимала всё окно
-    # ToDo создать самодельный класс модели данных, чтобы не перекрашивать строки руками
-    # ToDo True и пустая строка в ячейке - слишком костыльное решение
-    # ToDo глючит количество объектов в списке при скрытии\показе вершины
+    # ToDo выводить количество объектов в списке в виде Объектов: *, отображается: *
 
     _table_columns = [
         {"header": "Тип объекта", "width": 35, "hidden": False},
         {"header": "ID", "width": 100, "hidden": True},
         {"header": "Имя", "width": 400, "hidden": False},
-        {"header": "Статус", "width": 100, "hidden": False},
+        {"header": "Статус", "width": 100, "hidden": True},
     ]
 
     def __init__(self, *args, **kwargs):
@@ -283,9 +279,11 @@ class BrowseGraphWidget(BrowseWidget):
         levels_up = self.spb_up.value()
         levels_down = self.spb_down.value()
         history_point = self.pov_history[self.current_history_pos]
+        QtGui.QGuiApplication.setOverrideCursor(QtGui.Qt.BusyCursor)
         history_point.load_dependencies(levels_up, levels_down)
         self._read_graph_from_history()
         self._draw_current_graph()
+        QtGui.QGuiApplication.restoreOverrideCursor()
 
     def _draw_current_graph(self):
         """
