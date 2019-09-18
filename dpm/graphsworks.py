@@ -52,7 +52,6 @@ class DpmGraph:
             self._add_nx_node_from_model(pov_node)
             # proxy_graph - заместитель для отображения
             self.proxy_graph = self.nx_graph.copy()
-            
         else:
             self.nx_graph = nx_graph
             self.proxy_graph = self.nx_graph.copy()
@@ -60,7 +59,29 @@ class DpmGraph:
         self.levels_down = 0
         self.reached_bottom_limit = False
         self.reached_upper_limit = False
+    
+    # region properties
+    @property
+    def nodes(self):
+        return self.nx_graph.nodes()
+    
+    @property
+    def number_of_subordinate_nodes(self):
+        """
+        Возвращает количество вершин за вычетом POV.
+        """
+        return len(self.nx_graph.nodes())-1
+    
+    @property
+    def auto_hidden_nodes(self):
+        return [
+            node 
+            for node in self.nx_graph.node 
+            if self.nx_graph.node[node]["status"] == NodeStatus.AUTO_HIDDEN
+        ]
+    # endregion
 
+    # region public methods
     def load_dependencies(self, levels_up=0, levels_down=0):
         """
         Приводит граф к состоянию, когда у POV-вершины глубина восходящих связей 
@@ -89,7 +110,52 @@ class DpmGraph:
             self.reached_bottom_limit = False
         self._recalc()
         self._rollup_inner_contour()
+    
+    def hide_node(self, node_id):
+        self.nx_graph.node[node_id]["status"] = NodeStatus.ROLLED_UP
+        self._prepare_graph_for_drawing()
+    
+    def show_node(self, node_id):
+        self.nx_graph.node[node_id]["status"] = NodeStatus.VISIBLE
+        self._prepare_graph_for_drawing()
 
+    def show(self):
+        """
+        Рисует граф, применяя текущие настройки визуализации.
+        """
+        # красивая визуализация http://jonathansoma.com/lede/algorithms-2017/classes/networks/networkx-graphs-from-source-target-dataframe/
+        config = settings.visualization
+        pos = nx.spring_layout(self.proxy_graph, iterations=100)
+        for class_name in config["nodes"]:
+            nx.draw_networkx_nodes(
+                self.proxy_graph, 
+                pos, 
+                [n for n in self.proxy_graph.node if self.proxy_graph.node[n]["node_class"]==class_name], 
+                **config["nodes"][class_name]
+            )
+        for operation in config["edges"]:
+            nx.draw_networkx_edges(
+                self.proxy_graph, 
+                pos, 
+                [e for e in self.proxy_graph.edges if self.proxy_graph.adj[e[0]][e[1]][0].get(operation)==True], 
+                **config["edges"][operation]
+            )
+        nx.draw_networkx_labels(
+            self.proxy_graph, 
+            pos, 
+            {n:self.proxy_graph.node[n]["label"] for n in self.proxy_graph.node}, 
+            font_size=6
+        )
+    
+    def successors_of(self, node):
+        return self.nx_graph.successors(node)
+
+    def predecessors_of(self, node):
+        return self.nx_graph.predecessors(node)
+    
+    # endregion
+
+    # region utility methods
     def _cut_upper_levels(self, limit):
         """
         Удаляет вершины, длина кратчайшего пути от которых к POV превышает limit.
@@ -266,60 +332,9 @@ class DpmGraph:
             elif node in self.proxy_graph.node:
                 self.nx_graph.node[node]["status"] = NodeStatus.VISIBLE
 
-    def hide_node(self, node_id):
-        self.nx_graph.node[node_id]["status"] = NodeStatus.ROLLED_UP
-        self._prepare_graph_for_drawing()
+    # endregion
     
-    def show_node(self, node_id):
-        self.nx_graph.node[node_id]["status"] = NodeStatus.VISIBLE
-        self._prepare_graph_for_drawing()
-
-    def show(self):
-        """
-        Рисует граф, применяя текущие настройки визуализации.
-        """
-        # красивая визуализация http://jonathansoma.com/lede/algorithms-2017/classes/networks/networkx-graphs-from-source-target-dataframe/
-        config = settings.visualization
-        pos = nx.spring_layout(self.proxy_graph, iterations=100)
-        for class_name in config["nodes"]:
-            nx.draw_networkx_nodes(
-                self.proxy_graph, 
-                pos, 
-                [n for n in self.proxy_graph.node if self.proxy_graph.node[n]["node_class"]==class_name], 
-                **config["nodes"][class_name]
-            )
-        for operation in config["edges"]:
-            nx.draw_networkx_edges(
-                self.proxy_graph, 
-                pos, 
-                [e for e in self.proxy_graph.edges if self.proxy_graph.adj[e[0]][e[1]][0].get(operation)==True], 
-                **config["edges"][operation]
-            )
-        nx.draw_networkx_labels(
-            self.proxy_graph, 
-            pos, 
-            {n:self.proxy_graph.node[n]["label"] for n in self.proxy_graph.node}, 
-            font_size=6
-        )
-    
-    @property
-    def nodes(self):
-        return self.nx_graph.nodes()
-    
-    @property
-    def number_of_subordinate_nodes(self):
-        """
-        Возвращает количество вершин за вычетом POV.
-        """
-        return len(self.nx_graph.nodes())-1
-    
-    @property
-    def auto_hidden_nodes(self):
-        return [
-            node 
-            for node in self.nx_graph.node 
-            if self.nx_graph.node[node]["status"] == NodeStatus.AUTO_HIDDEN
-        ]
-
+    # region dunder methods
     def __getitem__(self, key):
         return self.nx_graph.node[key]
+    # endregion

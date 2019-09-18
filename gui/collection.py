@@ -33,6 +33,8 @@ class IconCollection:
             "new_pov": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/new_pov.png")),
             "invisible": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/invisible.png")),
             "visible": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/visible.png")),
+            "tree_up": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/tree_up.png")),
+            "tree_down": QtGui.QIcon(os.path.join(settings.GUI_DIR, "assets/tree_down.png")),
         }
 
         IconCollection.pixmaps = {

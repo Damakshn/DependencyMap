@@ -14,14 +14,23 @@ class BrowseGraphWidget(BrowseWidget):
     """
     Большой виджет, отвечающий за работу с графом зависимостей.
     """
-    # ToDo убрать настройки колонок куда-нибудь
-    # ToDo древовидная модель
-    # ToDo событие выбора ноды в списке и его передача наверх
-    # ToDo переход к новой точке отсчёта
-    # ToDo экспорт графа в другие форматы
-    # ToDo узнать, можно ли добавить зум и другие плюшки
-    # ToDo надо увеличить размер области рисования, чтобы она занимала всё окно
-    # ToDo выводить количество объектов в списке в виде Объектов: *, отображается: *
+    # region ToDO
+    # большие фичи интерфейса:
+    #   ToDo скрытие объекта в древовидной модели (с закрашиванием)
+    #   ToDo поиск
+    #   ToDo фокус на объекте в таблице\дереве при поиске
+    #   ToDo событие выбора ноды в списке и его передача наверх
+    #   ToDo переход к новой точке отсчёта
+    # структура кода
+    #   ToDo убрать настройки колонок куда-нибудь
+    # Область отображения:
+    #   ToDo узнать, можно ли добавить зум и другие плюшки
+    #   ToDo надо увеличить размер области рисования, чтобы она занимала всё окно
+    # дополнения
+    #   ToDo выводить количество объектов в списке в виде Объектов: *, отображается: *
+    # на будущее
+    #   ToDo экспорт графа в другие форматы
+    # endregion
 
     _table_columns = [
         {"header": "Тип объекта", "width": 35, "hidden": False},
@@ -35,22 +44,21 @@ class BrowseGraphWidget(BrowseWidget):
 
         self.current_history_pos = 0
         self.pov_history = []
+        layout = QtWidgets.QVBoxLayout()
 
-        grid = QtWidgets.QGridLayout()
-        grid.setColumnStretch(0, 5)
-        grid.setColumnStretch(1, 1)
-
-        self.setLayout(grid)
+        self.setLayout(layout)
+        self.splitter = QtWidgets.QSplitter()
+        self.layout().addWidget(self.splitter)
         self._init_draw_area()
         self._init_control_panel()
         self._init_node_context_menu()
 
+    # region initializers
 
     def _init_draw_area(self):
         self.figure = plt.figure()
         self.canvas = FigureCanvas(self.figure)
-        self.layout().addWidget(self.canvas, 0, 0)
-
+        self.splitter.addWidget(self.canvas)
 
     def _init_control_panel(self):
         # Панель управления отображением графа и содержащая список объектов.
@@ -61,8 +69,7 @@ class BrowseGraphWidget(BrowseWidget):
         self._init_dependencies_panel()
         self._init_list_control_panel()
         self._init_node_list()
-
-        self.layout().addWidget(self.control_panel, 0, 1)
+        self.splitter.addWidget(self.control_panel)
 
     def _init_pov_panel(self):
         # панель для вывода точки отсчёта (point of view)
@@ -178,21 +185,6 @@ class BrowseGraphWidget(BrowseWidget):
         panel.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
         self.control_panel.layout().addWidget(panel)
     
-    def _show_node_context_menu(self, position):
-        self.node_context_menu.clear()
-        self.node_context_menu.addAction(self.node_action_set_pov)
-        # если нода видимая, то добавляем в меню пункт "Скрыть"
-        # иначе добавляем пункт "Показать"
-        row_num = self.table_view.selectionModel().selectedRows()[0].row()
-        model = self.table_view.model()
-        status = int(model.data(model.index(row_num, 3)))
-        if status == NodeStatus.ROLLED_UP:
-            self.node_context_menu.addAction(self.node_action_show)
-        else:
-            self.node_context_menu.addAction(self.node_action_hide)
-        
-        self.node_context_menu.exec_(self.table_view.viewport().mapToGlobal(position))
-
     def _init_node_list(self):
         """
         Инициализирует виджеты, отвечающие за вывод списка вершин графа.
@@ -208,6 +200,14 @@ class BrowseGraphWidget(BrowseWidget):
         self.table_view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.table_view.customContextMenuRequested.connect(self._show_node_context_menu)
 
+        self.table_view.horizontalHeader().hide()
+        self.table_view.verticalHeader().hide()
+
+        """
+        self.table_view.selectionModel().selectionChanged.connect(self._process_row_selection)
+        self.tree_view.selectionModel().selectionChanged.connect(self._process_row_selection)
+        """
+
         self.node_list.addWidget(self.tree_view)
         self.node_list.addWidget(self.table_view)
         self.node_list.setCurrentIndex(self.node_list.indexOf(self.table_view))
@@ -216,14 +216,39 @@ class BrowseGraphWidget(BrowseWidget):
 
         self.number_of_nodes = QtWidgets.QLabel(f"Объектов: ")
         self.control_panel.layout().addWidget(self.number_of_nodes)
+    
+    # endregion
+    
+    # region utility methods
+
+    def _show_node_context_menu(self, position):
+        self.node_context_menu.clear()
+        self.node_context_menu.addAction(self.node_action_set_pov)
+        # если нода видимая, то добавляем в меню пункт "Скрыть"
+        # иначе добавляем пункт "Показать"
+        row_num = self.table_view.selectionModel().selectedRows()[0].row()
+        model = self.table_view.model()
+        status = int(model.data(model.index(row_num, 3)))
+        if status == NodeStatus.ROLLED_UP:
+            self.node_context_menu.addAction(self.node_action_show)
+        else:
+            self.node_context_menu.addAction(self.node_action_hide)
+        
+        self.node_context_menu.exec_(self.table_view.viewport().mapToGlobal(position))
+    
+    def _process_row_selection(self):
+        """
+        row_num = self.view.selectionModel().selectedRows()[0].row()
+        self.row_selected.emit()
+        """
+        row_num = self._active_view.selectionModel().selectedRows()[0].row()
+        self.selected_id = int(self.model.data(self.model.index(row_num, 0)))
 
     def _set_table_model(self, model):
         """
         Устанавливает табличную модель для виджета со списком вершин графа.
         """
         self.table_view.setModel(model)
-        self.table_view.horizontalHeader().hide()
-        self.table_view.verticalHeader().hide()
         for column in range(len(self._table_columns)):
             self.table_view.setColumnWidth(column, self._table_columns[column]["width"])
             self.table_view.setColumnHidden(column, self._table_columns[column]["hidden"])
@@ -233,7 +258,8 @@ class BrowseGraphWidget(BrowseWidget):
         Устанавливает древовидную модель для виджета со списком вершин графа.
         """
         self.tree_view.setModel(model)
-        self.tree_view.header().hide()
+        for column in range(len(self._table_columns)):
+            self.tree_view.setColumnHidden(column, self._table_columns[column]["hidden"])
     
     def _prepare_view(self):
         STATUS_COLUMN_INDEX = 3
@@ -374,30 +400,10 @@ class BrowseGraphWidget(BrowseWidget):
             self.chb_down.setChecked(True)
         else:
             self.spb_down.setValue(down)
-
-    def _convert_graph_to_tree_model(self, graph):
-        """
-        Конвертирует граф в древовидную модель для виджета.
-        """
-        # черновой вариант
-        """
-        tree_model = QtGui.QStandardItemModel()
-        root_item = tree_model.invisibleRootItem()
-
-        item_up = QtGui.QStandardItem("Вверх")
-        item_down = QtGui.QStandardItem("Вниз")
-        root_item.appendRow(item_up)
-        root_item.appendRow(item_down)
-
-        for i in range(3):
-            # без дублирования нельзя, иначе добавится только в одно место
-            new_item1 = QtGui.QStandardItem(f"{i+1}")
-            new_item2 = QtGui.QStandardItem(f"{i+4}")
-            item_up.appendRow(new_item1)
-            item_down.appendRow(new_item2)
-        """
-        pass
     
+    # endregion
+    
+    # region properties
     @property
     def _active_view(self):
         if self.chb_grouping.isChecked():
@@ -405,16 +411,12 @@ class BrowseGraphWidget(BrowseWidget):
         else:
             return self.table_view
     
+    # endregion
 
-    def _get_icon_for_node_class(self, node_class):
-        """
-        Подбирает иконку для отображения ноды в списке в зависимости от класса ноды.
-        """
-        return IconCollection.get_icon_for_node_class(node_class)
-
-    # public methods
+    # region public methods
     
     def query_node_data(self, node):
         if self._session is None:
             return
         self._make_new_pov(node)
+    # endregion
