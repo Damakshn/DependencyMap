@@ -241,8 +241,9 @@ class BrowseGraphWidget(BrowseWidget):
         row_num = self.view.selectionModel().selectedRows()[0].row()
         self.row_selected.emit()
         """
-        row_num = self._active_view.selectionModel().selectedRows()[0].row()
-        self.selected_id = int(self.model.data(self.model.index(row_num, 0)))
+        #row_num = self._active_view.selectionModel().selectedRows()[0].row()
+        #self.selected_id = int(self.model.data(self.model.index(row_num, 0)))
+        pass
 
     def _set_table_model(self, model):
         """
@@ -258,17 +259,17 @@ class BrowseGraphWidget(BrowseWidget):
         Устанавливает древовидную модель для виджета со списком вершин графа.
         """
         self.tree_view.setModel(model)
-        for column in range(len(self._table_columns)):
-            self.tree_view.setColumnHidden(column, self._table_columns[column]["hidden"])
+        #for column in range(len(self._table_columns)):
+            #self.tree_view.setColumnHidden(column, self._table_columns[column]["hidden"])
     
     def _prepare_view(self):
         STATUS_COLUMN_INDEX = 3
         # прячем в списке те объекты, которые были скрыты автоматически
-        model = self._active_view.model()
-        for row in range(model.rowCount()):
+        table_model = self.table_view.model() # _active_view
+        for row in range(table_model.rowCount()):
             self.table_view.setRowHidden(
-                row, 
-                int(model.index(row, STATUS_COLUMN_INDEX).data()) == NodeStatus.AUTO_HIDDEN
+                row,
+                int(table_model.index(row, STATUS_COLUMN_INDEX).data()) == NodeStatus.AUTO_HIDDEN
             )
         self.number_of_nodes.setText(f"Объектов: {self.pov_history[self.current_history_pos].number_of_nodes_in_list}")
     

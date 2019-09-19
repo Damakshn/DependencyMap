@@ -112,40 +112,16 @@ class HistoryPoint:
     def hide_node(self, model_index):
         row_num = model_index.row()
         node_id = int(self.active_model.data(self.active_model.index(row_num, 1)))
-        # модифицируем модель данных, чтобы указать, что нода спрятана пользователем
-        self.active_model.setData(self.active_model.index(row_num, self.STATUS_COLUMN_INDEX), str(int(NodeStatus.ROLLED_UP)))
-        # красим строку
         self._paint_row_as_rolled_up(row_num)
-        # прячем ноду в самом графе
         self.graph.hide_node(node_id)
-        
-        # помечаем в модели те объекты, которые были скрыты автоматически
-        nodes_to_hide = self.graph.auto_hidden_nodes
-        for row in range(self.active_model.rowCount()):
-            if int(self.active_model.index(row, 1).data()) in nodes_to_hide:
-                self.active_model.setData(self.active_model.index(row, self.STATUS_COLUMN_INDEX), str(int(NodeStatus.AUTO_HIDDEN)))
+        self._update_node_statuses_in_models()
     
     def show_node(self, model_index):
         row_num = model_index.row()
         node_id = int(self.active_model.data(self.active_model.index(row_num, 1)))
-        # модифицируем модель данных, чтобы указать, что нода снова видима
-        self.active_model.setData(self.active_model.index(row_num, self.STATUS_COLUMN_INDEX), str(int(NodeStatus.VISIBLE)))
-        # красим строку обратно
         self._paint_row_as_visible(row_num)
-        # обрабатываем граф
         self.graph.show_node(node_id)
-        # снимаем метку с тех вершин, которые должны стать видимыми
-        nodes_to_hide = self.graph.auto_hidden_nodes
-        for row in range(self.active_model.rowCount()):
-            if int(self.active_model.index(row, 1).data()) not in nodes_to_hide and int(str(self.active_model.index(row, 3).data())) != NodeStatus.ROLLED_UP:
-                self.active_model.setData(self.active_model.index(row, self.STATUS_COLUMN_INDEX), str(int(NodeStatus.VISIBLE)))
-    
-    def _create_model_row_from_node(self, node_id):
-        icon = QtGui.QStandardItem(IconCollection.get_icon_for_node_class(self.graph[node_id]["node_class"]), "")
-        id = QtGui.QStandardItem(str(self.graph[node_id]["id"]))
-        name = QtGui.QStandardItem(self.graph[node_id]["label"])
-        status = QtGui.QStandardItem(str(int(self.graph[node_id]["status"])))
-        return [icon, id, name, status]
+        self._update_node_statuses_in_models()
     
     # endregion
     
@@ -167,6 +143,19 @@ class HistoryPoint:
         for row in range(self.table_model.rowCount()):
             if int(self.table_model.data(self.table_model.index(row, self.STATUS_COLUMN_INDEX))) == NodeStatus.ROLLED_UP:
                 self._paint_row_as_rolled_up(row)
+
+    def _refresh_tree_model(self):
+        """
+        Конвертирует граф в древовидную модель для виджета.
+        """
+        print("refresh")
+        if self.tree_model is None:
+            self.tree_model = QtGui.QStandardItemModel()
+        else:
+            self.tree_model.clear()
+        self.tree_model.setHorizontalHeaderLabels([c["header"] for c in self.table_columns])
+        root_item = self.tree_model.invisibleRootItem()
+        root_item.appendRow(self._create_tree_row_from_node(self.pov_id, TreeDirection.BOTH))
     
     def _create_tree_row_from_node(self, node_id, direction):
         new_row = self._create_model_row_from_node(node_id)
@@ -187,40 +176,84 @@ class HistoryPoint:
             })
         else:
             return new_row
-        
+        node_status = self.graph[node_id]["status"]
         for fitem in folder_items:
             item_anchor = fitem["item"]
-            row_anchor.appendRow(item_anchor)
+            # если нода спрятана, то стрелка тоже спрятана
+            if node_status in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN):
+                anchor_status = str(int(NodeStatus.AUTO_HIDDEN))
+            else:
+                anchor_status = str(int(NodeStatus.VISIBLE))
+            row_anchor.appendRow([item_anchor, QtGui.QStandardItem(), QtGui.QStandardItem(), QtGui.QStandardItem(anchor_status)])
             for node_id in fitem["node_list"]:
                 item_anchor.appendRow(self._create_tree_row_from_node(node_id, fitem["direction"]))
         return new_row
-        
     
-    def _refresh_tree_model(self):
+    def _create_model_row_from_node(self, node_id):
+        icon = QtGui.QStandardItem(IconCollection.get_icon_for_node_class(self.graph[node_id]["node_class"]), "")
+        id = QtGui.QStandardItem(str(self.graph[node_id]["id"]))
+        name = QtGui.QStandardItem(self.graph[node_id]["label"])
+        status = QtGui.QStandardItem(str(int(self.graph[node_id]["status"])))
+        return [icon, id, name, status]
+    
+    def _update_node_statuses_in_models(self):
+        # табличная модель
+        for row in range(self.table_model.rowCount()):
+            id = int(self.table_model.index(row, 1).data())
+            self.table_model.setData(self.table_model.index(row, self.STATUS_COLUMN_INDEX), str(int(self.graph[id]["status"])))
+        # деревянная модель
+        root_item = self.tree_model.itemFromIndex(self.tree_model.index(0, 0))
+        self._update_status_in_tree_model_item(root_item)
+    
+    def _update_status_in_tree_model_item(self, item):
         """
-        Конвертирует граф в древовидную модель для виджета.
+        Обновляет статус объекта в древовидной модели и обрабатывает его потомков.
+        Дерево не является линейной структурой и один объект может
+        встречаться в разных местах многократно, плюс у древовидного представления
+        есть служебные строки (со стрелками), для группировки объектов по направлению связи (вниз и вверх).
         """
-        if self.tree_model is None:
-            self.tree_model = QtGui.QStandardItemModel()
-        else:
-            self.tree_model.clear()
-        self.tree_model.setHorizontalHeaderLabels([c["header"] for c in self.table_columns])
-        root_item = self.tree_model.invisibleRootItem()
-        root_item.appendRow(self._create_tree_row_from_node(self.pov_id, TreeDirection.BOTH))
+        # получаем строку, родителя и индекс родителя чтобы
+        # иметь возможность извлекать данные из модели
+        row = item.row()
+        parent = item.parent()
+        parent_index = parent.index() if parent is not None else QtCore.QModelIndex()
+        id = self.tree_model.index(row, 1, parent_index).data()
+        id = int(id) if id is not None else None
+        print(f"id is {id}, name is {self.tree_model.index(row, 2, parent_index).data()}")
+        if parent is not None:
+            parent_row = parent.row()
+            praparent_index = parent.parent().index() if parent.parent() is not None else QtCore.QModelIndex()
+            parent_status = int(self.tree_model.index(parent_row, self.STATUS_COLUMN_INDEX, praparent_index).data())
+            new_status = str(int(NodeStatus.VISIBLE))
+            # если родитель свёрнут или невидим, то помечаем строку как спрятанную
+            if parent_status in (NodeStatus.AUTO_HIDDEN, NodeStatus.ROLLED_UP):
+                new_status = str(int(NodeStatus.AUTO_HIDDEN))
+            # иначе (если это не стрелка) ставим фактический статус
+            elif id is not None:
+                new_status = str(int(self.graph[id]["status"]))
+            # для стрелки просто копируем статус родителя
+            else:
+                new_status = str(parent_status)
+            self.tree_model.setData(self.tree_model.index(row, self.STATUS_COLUMN_INDEX, parent_index), new_status)
+        for child_row in range(item.rowCount()):
+            child_item = item.child(child_row)
+            self._update_status_in_tree_model_item(child_item)
+        
     
     def _paint_row_as_rolled_up(self, row):
         for column in range(len(self.table_columns)):
-            self.active_model.setData(
-                self.active_model.index(row, column), 
+            self.table_model.setData(
+                self.table_model.index(row, column), 
                 QtGui.QBrush(QtCore.Qt.lightGray),
                 QtCore.Qt.BackgroundRole
             )
     
     def _paint_row_as_visible(self, row):
         for column in range(len(self.table_columns)):
-            self.active_model.setData(
-                self.active_model.index(row, column), 
+            self.table_model.setData(
+                self.table_model.index(row, column), 
                 QtGui.QBrush(QtCore.Qt.white), 
                 QtCore.Qt.BackgroundRole
             )
+
     # endregion
