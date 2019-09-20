@@ -148,7 +148,6 @@ class HistoryPoint:
         """
         Конвертирует граф в древовидную модель для виджета.
         """
-        print("refresh")
         if self.tree_model is None:
             self.tree_model = QtGui.QStandardItemModel()
         else:
@@ -202,43 +201,44 @@ class HistoryPoint:
             id = int(self.table_model.index(row, 1).data())
             self.table_model.setData(self.table_model.index(row, self.STATUS_COLUMN_INDEX), str(int(self.graph[id]["status"])))
         # деревянная модель
-        root_item = self.tree_model.itemFromIndex(self.tree_model.index(0, 0))
-        self._update_status_in_tree_model_item(root_item)
+        self._update_statuses_in_tree_model_item()
     
-    def _update_status_in_tree_model_item(self, item):
+    def _update_statuses_in_tree_model_item(self):
         """
-        Обновляет статус объекта в древовидной модели и обрабатывает его потомков.
+        Обновляет статусы объектов в древовидной модели.
         Дерево не является линейной структурой и один объект может
         встречаться в разных местах многократно, плюс у древовидного представления
         есть служебные строки (со стрелками), для группировки объектов по направлению связи (вниз и вверх).
         """
-        # получаем строку, родителя и индекс родителя чтобы
-        # иметь возможность извлекать данные из модели
-        row = item.row()
-        parent = item.parent()
-        parent_index = parent.index() if parent is not None else QtCore.QModelIndex()
-        id = self.tree_model.index(row, 1, parent_index).data()
-        id = int(id) if id is not None else None
-        print(f"id is {id}, name is {self.tree_model.index(row, 2, parent_index).data()}")
-        if parent is not None:
-            parent_row = parent.row()
-            praparent_index = parent.parent().index() if parent.parent() is not None else QtCore.QModelIndex()
-            parent_status = int(self.tree_model.index(parent_row, self.STATUS_COLUMN_INDEX, praparent_index).data())
-            new_status = str(int(NodeStatus.VISIBLE))
-            # если родитель свёрнут или невидим, то помечаем строку как спрятанную
-            if parent_status in (NodeStatus.AUTO_HIDDEN, NodeStatus.ROLLED_UP):
-                new_status = str(int(NodeStatus.AUTO_HIDDEN))
-            # иначе (если это не стрелка) ставим фактический статус
-            elif id is not None:
-                new_status = str(int(self.graph[id]["status"]))
-            # для стрелки просто копируем статус родителя
-            else:
-                new_status = str(parent_status)
-            self.tree_model.setData(self.tree_model.index(row, self.STATUS_COLUMN_INDEX, parent_index), new_status)
-        for child_row in range(item.rowCount()):
-            child_item = item.child(child_row)
-            self._update_status_in_tree_model_item(child_item)
-        
+        root = self.tree_model.itemFromIndex(self.tree_model.index(0, 0)).index()
+        stack = []
+        stack.append(root)
+        while len(stack) > 0:
+            next_index = stack.pop()
+            item = self.tree_model.itemFromIndex(next_index)
+            row = item.row()
+            parent = item.parent()
+            parent_index = parent.index() if parent is not None else QtCore.QModelIndex()
+            id = self.tree_model.index(row, 1, parent_index).data()
+            id = int(id) if id is not None else None
+            if parent is not None:
+                parent_row = parent.row()
+                praparent_index = parent.parent().index() if parent.parent() is not None else QtCore.QModelIndex()
+                parent_status = int(self.tree_model.index(parent_row, self.STATUS_COLUMN_INDEX, praparent_index).data())
+                new_status = str(int(NodeStatus.VISIBLE))
+                # если родитель свёрнут или невидим, то помечаем строку как спрятанную
+                if parent_status in (NodeStatus.AUTO_HIDDEN, NodeStatus.ROLLED_UP):
+                    new_status = str(int(NodeStatus.AUTO_HIDDEN))
+                # иначе (если это не стрелка) ставим фактический статус
+                elif id is not None:
+                    new_status = str(int(self.graph[id]["status"]))
+                # для стрелки просто копируем статус родителя
+                else:
+                    new_status = str(parent_status)
+                self.tree_model.setData(self.tree_model.index(row, self.STATUS_COLUMN_INDEX, parent_index), new_status)
+            for row in range(item.rowCount()):
+                child_index = self.tree_model.index(row, 0, next_index)
+                stack.append(child_index)
     
     def _paint_row_as_rolled_up(self, row):
         for column in range(len(self.table_columns)):
