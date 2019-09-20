@@ -112,14 +112,12 @@ class HistoryPoint:
     def hide_node(self, model_index):
         row_num = model_index.row()
         node_id = int(self.active_model.data(self.active_model.index(row_num, 1)))
-        self._paint_row_as_rolled_up(row_num)
         self.graph.hide_node(node_id)
         self._update_node_statuses_in_models()
     
     def show_node(self, model_index):
         row_num = model_index.row()
         node_id = int(self.active_model.data(self.active_model.index(row_num, 1)))
-        self._paint_row_as_visible(row_num)
         self.graph.show_node(node_id)
         self._update_node_statuses_in_models()
     
@@ -128,7 +126,7 @@ class HistoryPoint:
     # region utility methods
     def _refresh_table_model(self):
         """
-        Полностью обновляет табличную модель на основе графа.
+        Полностью обновляет табличную модель на основе графа при подгрузке зависимостей.
         """
         if self.table_model is None:
             self.table_model = QtGui.QStandardItemModel()
@@ -142,11 +140,11 @@ class HistoryPoint:
             self.table_model.appendRow(new_row)
         for row in range(self.table_model.rowCount()):
             if int(self.table_model.data(self.table_model.index(row, self.STATUS_COLUMN_INDEX))) == NodeStatus.ROLLED_UP:
-                self._paint_row_as_rolled_up(row)
+                self._paint_row_as_rolled_up(self.table_model, row)
 
     def _refresh_tree_model(self):
         """
-        Конвертирует граф в древовидную модель для виджета.
+        Полностью обновляет древовидную модель на основе графа при подгрузке зависимостей.
         """
         if self.tree_model is None:
             self.tree_model = QtGui.QStandardItemModel()
@@ -155,6 +153,9 @@ class HistoryPoint:
         self.tree_model.setHorizontalHeaderLabels([c["header"] for c in self.table_columns])
         root_item = self.tree_model.invisibleRootItem()
         root_item.appendRow(self._create_tree_row_from_node(self.pov_id, TreeDirection.BOTH))
+        # древовидная модель сложнее табличной, после её заполнения данными из графа
+        # нужно дополнительно пройти по вершинам и расставить им правильные статусы
+        self._update_statuses_in_tree_model()
     
     def _create_tree_row_from_node(self, node_id, direction):
         new_row = self._create_model_row_from_node(node_id)
@@ -196,14 +197,22 @@ class HistoryPoint:
         return [icon, id, name, status]
     
     def _update_node_statuses_in_models(self):
+        """
+        Метод, обновляющий статусы вершин в моделях данных в те моменты,
+        когда вершина прячется или показывается.
+        """
         # табличная модель
         for row in range(self.table_model.rowCount()):
             id = int(self.table_model.index(row, 1).data())
             self.table_model.setData(self.table_model.index(row, self.STATUS_COLUMN_INDEX), str(int(self.graph[id]["status"])))
+            if self.graph[id]["status"] == NodeStatus.VISIBLE:
+                self._paint_row_as_visible(self.table_model, row)
+            elif self.graph[id]["status"] == NodeStatus.ROLLED_UP:
+                self._paint_row_as_rolled_up(self.table_model, row)
         # деревянная модель
-        self._update_statuses_in_tree_model_item()
+        self._update_statuses_in_tree_model()
     
-    def _update_statuses_in_tree_model_item(self):
+    def _update_statuses_in_tree_model(self):
         """
         Обновляет статусы объектов в древовидной модели.
         Дерево не является линейной структурой и один объект может
@@ -225,35 +234,31 @@ class HistoryPoint:
                 parent_row = parent.row()
                 praparent_index = parent.parent().index() if parent.parent() is not None else QtCore.QModelIndex()
                 parent_status = int(self.tree_model.index(parent_row, self.STATUS_COLUMN_INDEX, praparent_index).data())
-                new_status = str(int(NodeStatus.VISIBLE))
+                new_status = int(NodeStatus.VISIBLE)
                 # если родитель свёрнут или невидим, то помечаем строку как спрятанную
                 if parent_status in (NodeStatus.AUTO_HIDDEN, NodeStatus.ROLLED_UP):
-                    new_status = str(int(NodeStatus.AUTO_HIDDEN))
+                    new_status = int(NodeStatus.AUTO_HIDDEN)
                 # иначе (если это не стрелка) ставим фактический статус
                 elif id is not None:
-                    new_status = str(int(self.graph[id]["status"]))
+                    new_status = int(self.graph[id]["status"])
                 # для стрелки просто копируем статус родителя
                 else:
-                    new_status = str(parent_status)
-                self.tree_model.setData(self.tree_model.index(row, self.STATUS_COLUMN_INDEX, parent_index), new_status)
+                    new_status = parent_status
+                self.tree_model.setData(self.tree_model.index(row, self.STATUS_COLUMN_INDEX, parent_index), str(new_status))
+                if new_status == NodeStatus.VISIBLE:
+                    self._paint_row_as_visible(self.tree_model, row, parent=parent_index)
+                elif new_status == NodeStatus.ROLLED_UP:
+                    self._paint_row_as_rolled_up(self.tree_model, row, parent=parent_index)
             for row in range(item.rowCount()):
                 child_index = self.tree_model.index(row, 0, next_index)
                 stack.append(child_index)
     
-    def _paint_row_as_rolled_up(self, row):
-        for column in range(len(self.table_columns)):
-            self.table_model.setData(
-                self.table_model.index(row, column), 
-                QtGui.QBrush(QtCore.Qt.lightGray),
-                QtCore.Qt.BackgroundRole
-            )
-    
-    def _paint_row_as_visible(self, row):
-        for column in range(len(self.table_columns)):
-            self.table_model.setData(
-                self.table_model.index(row, column), 
-                QtGui.QBrush(QtCore.Qt.white), 
-                QtCore.Qt.BackgroundRole
-            )
+    def _paint_row_as_rolled_up(self, model, row, parent=QtCore.QModelIndex()):
+        item = model.itemFromIndex(model.index(row, 0, parent))
+        item.setEnabled(False)
+
+    def _paint_row_as_visible(self, model, row, parent=QtCore.QModelIndex()):
+        item = model.itemFromIndex(model.index(row, 0, parent))
+        item.setEnabled(True)
 
     # endregion
