@@ -265,12 +265,36 @@ class BrowseGraphWidget(BrowseWidget):
     def _prepare_view(self):
         STATUS_COLUMN_INDEX = 3
         # прячем в списке те объекты, которые были скрыты автоматически
-        table_model = self.table_view.model() # _active_view
+        table_model = self.table_view.model()
         for row in range(table_model.rowCount()):
             self.table_view.setRowHidden(
                 row,
                 int(table_model.index(row, STATUS_COLUMN_INDEX).data()) == NodeStatus.AUTO_HIDDEN
             )
+        
+        # деревянная модель
+        tree_model = self.tree_view.model()
+        stack = []
+        parent = QtCore.QModelIndex()
+        stack.append(parent)
+        while len(stack) > 0:
+            parent = stack.pop()
+            row = parent.row()
+            # читаем статус вершины, чтобы понять, надо ли прятать её потомков
+            status = tree_model.index(row, 3, parent.parent()).data()
+            status = int(status) if status is not None else None
+            if tree_model.hasChildren(parent) == False:
+                continue
+            if status in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN):
+                # если вершина спрятана, то прячем её потомков
+                for child_row in range(tree_model.rowCount(parent)):
+                    self.tree_view.setRowHidden(child_row, parent, True)
+            else:
+                for child_row in range(tree_model.rowCount(parent)):
+                    self.tree_view.setRowHidden(child_row, parent, False)
+                # если нода является видимой в списке, то обрабатываем её потомков
+                for child_row in range(tree_model.rowCount(parent=parent)):
+                    stack.append(tree_model.index(child_row, 0, parent))
         self.number_of_nodes.setText(f"Объектов: {self.pov_history[self.current_history_pos].number_of_nodes_in_list}")
     
     def _read_graph_from_history(self):

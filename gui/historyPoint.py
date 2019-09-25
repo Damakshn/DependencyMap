@@ -219,7 +219,7 @@ class HistoryPoint:
         встречаться в разных местах многократно, плюс у древовидного представления
         есть служебные строки (со стрелками), для группировки объектов по направлению связи (вниз и вверх).
         """
-        root = self.tree_model.itemFromIndex(self.tree_model.index(0, 0)).index()
+        root = self.tree_model.index(0, 0)
         stack = []
         stack.append(root)
         while len(stack) > 0:
