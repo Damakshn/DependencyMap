@@ -3,6 +3,19 @@ from PySide2 import QtWidgets, QtGui, QtCore
 from .collection import IconCollection
 from enum import Enum, auto
 
+class NodeListColumns:
+
+    structure = [
+        {"header": "Тип объекта", "width": 35, "hidden": False},
+        {"header": "ID", "width": 100, "hidden": True},
+        {"header": "Имя", "width": 400, "hidden": False},
+        {"header": "Статус", "width": 100, "hidden": True},
+    ]
+
+    ICON_COLUMN = 0
+    ID_COLUMN = 1
+    NAME_COLUMN = 2
+    STATUS_COLUMN = 3
 
 class TreeDirection(Enum):
     UP = auto()
@@ -14,8 +27,6 @@ class HistoryPoint:
     Класс-обёртка для графа зависимостей и моделей данных PyQt,
     представляющих его в виде таблицы и дерева.
     """
-
-    STATUS_COLUMN_INDEX = 3
     
     def __init__(self, session, initial_node, grouping=False):
         self.graph = DpmGraph(session, initial_node)
@@ -27,15 +38,6 @@ class HistoryPoint:
         self.grouping = grouping
     
     # region properties
-    @property
-    def table_columns(self):
-        return [
-            {"header": "Тип объекта", "width": 35, "hidden": False},
-            {"header": "ID", "width": 100, "hidden": True},
-            {"header": "Имя", "width": 400, "hidden": False},
-            {"header": "Статус", "width": 100, "hidden": True},
-        ]
-    
     @property
     def active_model(self):
         if self.grouping:
@@ -111,13 +113,13 @@ class HistoryPoint:
     
     def hide_node(self, model_index):
         row_num = model_index.row()
-        node_id = int(self.active_model.data(self.active_model.index(row_num, 1)))
+        node_id = int(self.active_model.data(self.active_model.index(row_num, NodeListColumns.ID_COLUMN)))
         self.graph.hide_node(node_id)
         self._update_node_statuses_in_models()
     
     def show_node(self, model_index):
         row_num = model_index.row()
-        node_id = int(self.active_model.data(self.active_model.index(row_num, 1)))
+        node_id = int(self.active_model.data(self.active_model.index(row_num, NodeListColumns.ID_COLUMN)))
         self.graph.show_node(node_id)
         self._update_node_statuses_in_models()
     
@@ -132,14 +134,14 @@ class HistoryPoint:
             self.table_model = QtGui.QStandardItemModel()
         else:
             self.table_model.clear()
-        self.table_model.setHorizontalHeaderLabels([c["header"] for c in self.table_columns])
+        self.table_model.setHorizontalHeaderLabels([column["header"] for column in NodeListColumns.structure])
         for node_id in self.graph.nodes:
             if node_id == self.graph.pov_id:
                 continue
             new_row = self._create_model_row_from_node(node_id)
             self.table_model.appendRow(new_row)
         for row in range(self.table_model.rowCount()):
-            if int(self.table_model.data(self.table_model.index(row, self.STATUS_COLUMN_INDEX))) == NodeStatus.ROLLED_UP:
+            if int(self.table_model.data(self.table_model.index(row, NodeListColumns.STATUS_COLUMN))) == NodeStatus.ROLLED_UP:
                 self._paint_row_as_rolled_up(self.table_model, row)
 
     def _refresh_tree_model(self):
@@ -150,7 +152,7 @@ class HistoryPoint:
             self.tree_model = QtGui.QStandardItemModel()
         else:
             self.tree_model.clear()
-        self.tree_model.setHorizontalHeaderLabels([c["header"] for c in self.table_columns])
+        self.tree_model.setHorizontalHeaderLabels([column["header"] for column in NodeListColumns.structure])
         root_item = self.tree_model.invisibleRootItem()
         root_item.appendRow(self._create_tree_row_from_node(self.pov_id, TreeDirection.BOTH))
         # древовидная модель сложнее табличной, после её заполнения данными из графа
@@ -203,8 +205,8 @@ class HistoryPoint:
         """
         # табличная модель
         for row in range(self.table_model.rowCount()):
-            id = int(self.table_model.index(row, 1).data())
-            self.table_model.setData(self.table_model.index(row, self.STATUS_COLUMN_INDEX), str(int(self.graph[id]["status"])))
+            id = int(self.table_model.index(row, NodeListColumns.ID_COLUMN).data())
+            self.table_model.setData(self.table_model.index(row, NodeListColumns.STATUS_COLUMN), str(int(self.graph[id]["status"])))
             if self.graph[id]["status"] == NodeStatus.VISIBLE:
                 self._paint_row_as_visible(self.table_model, row)
             elif self.graph[id]["status"] == NodeStatus.ROLLED_UP:
@@ -228,12 +230,12 @@ class HistoryPoint:
             row = item.row()
             parent = item.parent()
             parent_index = parent.index() if parent is not None else QtCore.QModelIndex()
-            id = self.tree_model.index(row, 1, parent_index).data()
+            id = self.tree_model.index(row, NodeListColumns.ID_COLUMN, parent_index).data()
             id = int(id) if id is not None else None
             if parent is not None:
                 parent_row = parent.row()
                 praparent_index = parent.parent().index() if parent.parent() is not None else QtCore.QModelIndex()
-                parent_status = int(self.tree_model.index(parent_row, self.STATUS_COLUMN_INDEX, praparent_index).data())
+                parent_status = int(self.tree_model.index(parent_row, NodeListColumns.STATUS_COLUMN, praparent_index).data())
                 new_status = int(NodeStatus.VISIBLE)
                 # если родитель свёрнут или невидим, то помечаем строку как спрятанную
                 if parent_status in (NodeStatus.AUTO_HIDDEN, NodeStatus.ROLLED_UP):
@@ -244,7 +246,7 @@ class HistoryPoint:
                 # для стрелки просто копируем статус родителя
                 else:
                     new_status = parent_status
-                self.tree_model.setData(self.tree_model.index(row, self.STATUS_COLUMN_INDEX, parent_index), str(new_status))
+                self.tree_model.setData(self.tree_model.index(row, NodeListColumns.STATUS_COLUMN, parent_index), str(new_status))
                 if new_status == NodeStatus.VISIBLE:
                     self._paint_row_as_visible(self.tree_model, row, parent=parent_index)
                 elif new_status == NodeStatus.ROLLED_UP:

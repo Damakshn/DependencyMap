@@ -7,7 +7,7 @@ import os
 import settings
 from dpm.graphsworks import DpmGraph, NodeStatus
 from .collection import IconCollection
-from .historyPoint import HistoryPoint
+from .historyPoint import HistoryPoint, NodeListColumns
 
 
 class BrowseGraphWidget(BrowseWidget):
@@ -21,8 +21,8 @@ class BrowseGraphWidget(BrowseWidget):
     #   ToDo фокус на объекте в таблице\дереве при поиске
     #   ToDo событие выбора ноды в списке и его передача наверх
     #   ToDo переход к новой точке отсчёта
-    # структура кода
-    #   ToDo убрать настройки колонок куда-нибудь
+    # структура кода:
+    #
     # Область отображения:
     #   ToDo узнать, можно ли добавить зум и другие плюшки
     #   ToDo надо увеличить размер области рисования, чтобы она занимала всё окно
@@ -31,13 +31,6 @@ class BrowseGraphWidget(BrowseWidget):
     # на будущее
     #   ToDo экспорт графа в другие форматы
     # endregion
-
-    _table_columns = [
-        {"header": "Тип объекта", "width": 35, "hidden": False},
-        {"header": "ID", "width": 100, "hidden": True},
-        {"header": "Имя", "width": 400, "hidden": False},
-        {"header": "Статус", "width": 100, "hidden": True},
-    ]
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
@@ -228,7 +221,7 @@ class BrowseGraphWidget(BrowseWidget):
         # иначе добавляем пункт "Показать"
         row_num = self.table_view.selectionModel().selectedRows()[0].row()
         model = self.table_view.model()
-        status = int(model.data(model.index(row_num, 3)))
+        status = int(model.data(model.index(row_num, NodeListColumns.STATUS_COLUMN)))
         if status == NodeStatus.ROLLED_UP:
             self.node_context_menu.addAction(self.node_action_show)
         else:
@@ -242,7 +235,7 @@ class BrowseGraphWidget(BrowseWidget):
         self.row_selected.emit()
         """
         #row_num = self._active_view.selectionModel().selectedRows()[0].row()
-        #self.selected_id = int(self.model.data(self.model.index(row_num, 0)))
+        #self.selected_id = int(self.model.data(self.model.index(row_num, NodeListColumns.ID_COLUMN)))
         pass
 
     def _set_table_model(self, model):
@@ -250,26 +243,25 @@ class BrowseGraphWidget(BrowseWidget):
         Устанавливает табличную модель для виджета со списком вершин графа.
         """
         self.table_view.setModel(model)
-        for column in range(len(self._table_columns)):
-            self.table_view.setColumnWidth(column, self._table_columns[column]["width"])
-            self.table_view.setColumnHidden(column, self._table_columns[column]["hidden"])
+        for column in range(len(NodeListColumns.structure)):
+            self.table_view.setColumnWidth(column, NodeListColumns.structure[column]["width"])
+            self.table_view.setColumnHidden(column, NodeListColumns.structure[column]["hidden"])
 
     def _set_tree_model(self, model):
         """
         Устанавливает древовидную модель для виджета со списком вершин графа.
         """
         self.tree_view.setModel(model)
-        #for column in range(len(self._table_columns)):
-            #self.tree_view.setColumnHidden(column, self._table_columns[column]["hidden"])
+        #for column in range(len(NodeListColumns.structure)):
+            #self.tree_view.setColumnHidden(column, NodeListColumns.structure[column]["hidden"])
     
     def _prepare_view(self):
-        STATUS_COLUMN_INDEX = 3
         # прячем в списке те объекты, которые были скрыты автоматически
         table_model = self.table_view.model()
         for row in range(table_model.rowCount()):
             self.table_view.setRowHidden(
                 row,
-                int(table_model.index(row, STATUS_COLUMN_INDEX).data()) == NodeStatus.AUTO_HIDDEN
+                int(table_model.index(row, NodeListColumns.STATUS_COLUMN).data()) == NodeStatus.AUTO_HIDDEN
             )
         
         # деревянная модель
@@ -281,7 +273,7 @@ class BrowseGraphWidget(BrowseWidget):
             parent = stack.pop()
             row = parent.row()
             # читаем статус вершины, чтобы понять, надо ли прятать её потомков
-            status = tree_model.index(row, 3, parent.parent()).data()
+            status = tree_model.index(row, NodeListColumns.STATUS_COLUMN, parent.parent()).data()
             status = int(status) if status is not None else None
             if tree_model.hasChildren(parent) == False:
                 continue
