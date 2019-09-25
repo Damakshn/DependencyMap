@@ -16,7 +16,6 @@ class BrowseGraphWidget(BrowseWidget):
     """
     # region ToDO
     # большие фичи интерфейса:
-    #   ToDo скрытие объекта в древовидной модели (с закрашиванием)
     #   ToDo поиск
     #   ToDo фокус на объекте в таблице\дереве при поиске
     #   ToDo событие выбора ноды в списке и его передача наверх
@@ -186,13 +185,14 @@ class BrowseGraphWidget(BrowseWidget):
         self.node_list = QtWidgets.QStackedWidget()
 
         self.tree_view = QtWidgets.QTreeView()
+        self.tree_view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.tree_view.customContextMenuRequested.connect(self._show_node_context_menu)
 
         self.table_view = QtWidgets.QTableView()
         self.table_view.setSelectionMode(QtWidgets.QAbstractItemView.SingleSelection)
         self.table_view.setSelectionBehavior(QtWidgets.QAbstractItemView.SelectRows)
         self.table_view.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
         self.table_view.customContextMenuRequested.connect(self._show_node_context_menu)
-
         self.table_view.horizontalHeader().hide()
         self.table_view.verticalHeader().hide()
 
@@ -219,9 +219,9 @@ class BrowseGraphWidget(BrowseWidget):
         self.node_context_menu.addAction(self.node_action_set_pov)
         # если нода видимая, то добавляем в меню пункт "Скрыть"
         # иначе добавляем пункт "Показать"
-        row_num = self.table_view.selectionModel().selectedRows()[0].row()
-        model = self.table_view.model()
-        status = int(model.data(model.index(row_num, NodeListColumns.STATUS_COLUMN)))
+        chosen_index = self._active_view.selectionModel().selectedRows()[0]
+        model = self._active_view.model()
+        status = int(model.data(model.index(chosen_index.row(), NodeListColumns.STATUS_COLUMN, chosen_index.parent())))
         if status == NodeStatus.ROLLED_UP:
             self.node_context_menu.addAction(self.node_action_show)
         else:
@@ -373,6 +373,7 @@ class BrowseGraphWidget(BrowseWidget):
         else:
             index = self.node_list.indexOf(self.table_view)
         self.node_list.setCurrentIndex(index)
+        self.pov_history[self.current_history_pos].set_grouping_enagled(self.chb_grouping.isChecked())
 
     def _search_node_in_list(self):
         pass
@@ -387,14 +388,14 @@ class BrowseGraphWidget(BrowseWidget):
         self._reload_dependencies()
     
     def _hide_node(self):
-        index = self.table_view.selectionModel().currentIndex()
+        index = self._active_view.selectionModel().currentIndex()
         history_point = self.pov_history[self.current_history_pos]
         history_point.hide_node(index)
         self._prepare_view()
         self._draw_current_graph()
     
     def _show_node(self):
-        index = self.table_view.selectionModel().currentIndex()
+        index = self._active_view.selectionModel().currentIndex()
         history_point = self.pov_history[self.current_history_pos]
         history_point.show_node(index)
         self._prepare_view()

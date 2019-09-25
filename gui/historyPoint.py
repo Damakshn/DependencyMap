@@ -112,14 +112,12 @@ class HistoryPoint:
         self.graph.show()
     
     def hide_node(self, model_index):
-        row_num = model_index.row()
-        node_id = int(self.active_model.data(self.active_model.index(row_num, NodeListColumns.ID_COLUMN)))
+        node_id = int(self.active_model.data(self.active_model.index(model_index.row(), NodeListColumns.ID_COLUMN, model_index.parent())))
         self.graph.hide_node(node_id)
         self._update_node_statuses_in_models()
     
     def show_node(self, model_index):
-        row_num = model_index.row()
-        node_id = int(self.active_model.data(self.active_model.index(row_num, NodeListColumns.ID_COLUMN)))
+        node_id = int(self.active_model.data(self.active_model.index(model_index.row(), NodeListColumns.ID_COLUMN, model_index.parent())))
         self.graph.show_node(node_id)
         self._update_node_statuses_in_models()
     
