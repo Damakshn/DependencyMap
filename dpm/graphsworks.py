@@ -43,8 +43,8 @@ class DpmGraph:
     подгружать информацию из БД.
     """
    
-    def __init__(self, session, pov_node, nx_graph=None):
-        self.session = session
+    def __init__(self, storage, pov_node, nx_graph=None):
+        self._storage = storage
         self.pov_id = pov_node.id
         if nx_graph is None:
             # nx_graph - основной граф, отражающий реальную структуру зависимостей
@@ -186,7 +186,7 @@ class DpmGraph:
                 upper_periphery.add(node_id)
         # используем набор крайних вершин как отправную точку для поиска
         rising_failed = []
-        for node in self.session.query(Node).filter(Node.id.in_(upper_periphery)).all():
+        for node in self._storage.get_group_of_nodes_by_ids(upper_periphery):
             rising_failed.append(self._explore_upper_nodes(node, levels_counter))
         return all(rising_failed)
 
@@ -202,7 +202,7 @@ class DpmGraph:
                 bottom_periphery.add(node_id)
         # используем набор крайних вершин как отправную точку для поиска
         digging_failed = []
-        for node in self.session.query(Node).filter(Node.id.in_(bottom_periphery)).all():
+        for node in self._storage.get_group_of_nodes_by_ids(bottom_periphery):
             digging_failed.append(self._explore_lower_nodes(node, levels_counter))
         return all(digging_failed)
 

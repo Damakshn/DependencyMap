@@ -11,10 +11,11 @@ from sync.scan_source import scan_application
 import dpm.visualization as viz
 import dpm.graphsworks as gw
 import settings
+from dpm.storage import NodeStorage
 from gui import init_gui
 
 
-def create_gui_session(config):
+def create_new_session(config):
 	connector = Connector(**config["connector"])
 	session = connector.connect_to_dpm()
 	return session
@@ -71,8 +72,8 @@ def prepare_test_sqlite_db(connector, config):
 
 def main():
 	config = settings.config
-	init_gui(create_gui_session(config))
-
+	storage = NodeStorage(create_new_session(config))
+	init_gui(storage)
 
 if __name__ == "__main__":
 	main()

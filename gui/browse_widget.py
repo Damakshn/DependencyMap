@@ -6,12 +6,12 @@ class BrowseWidget(QtWidgets.QWidget):
 
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
-        self._session = None
+        self._storage = None
         self.observed_node = None
         self.selected_node = None
 
-    def set_session(self, session):
-        self._session = session
+    def set_storage(self, storage):
+        self._storage = storage
     
     def _set_selected_node(self, node):
         self.selected_node = node

@@ -105,16 +105,16 @@ class BrowseObjectWidget(BrowseWidget):
             self.tab_pane.addTab(list_pane, category["name"])
 
     def query_system_data(self):
-        if self._session is None:
+        if self._storage is None:
             return
         dataset = [
             {
                 "name": "АРМы",
-                "dataset": self._session.query(models.Application).all()
+                "dataset": self._storage.get_applications_list()
             },
             {
                 "name": "Базы",
-                "dataset": self._session.query(models.Database).all()
+                "dataset": self._storage.get_databases_list()
             }
         ]
         self.observed_node = None
@@ -122,7 +122,7 @@ class BrowseObjectWidget(BrowseWidget):
         self.load_data(dataset)
 
     def query_node_data(self, node):
-        if self._session is None:
+        if self._storage is None:
             return
         if not hasattr(node, "categories"):
             raise Exception(f"Обзор объектов {node.__class__.__name__} не поддерживается.")

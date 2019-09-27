@@ -15,11 +15,14 @@ class BrowseGraphWidget(BrowseWidget):
     Большой виджет, отвечающий за работу с графом зависимостей.
     """
     # region ToDO
+    # что же всё-таки передавать - ноду или id, абстрагирование от алхимии и сессий
     # большие фичи интерфейса:
     #   ToDo поиск
     #   ToDo фокус на объекте в таблице\дереве при поиске
     #   ToDo событие выбора ноды в списке и его передача наверх
     #   ToDo переход к новой точке отсчёта
+    #   ToDo невозможность вызвать контекстное меню на точке отсчета в списке
+    #   ToDo спрятанная вершина со спрятанным родителем тоже должна исчезнуть
     # структура кода:
     #
     # Область отображения:
@@ -380,7 +383,7 @@ class BrowseGraphWidget(BrowseWidget):
 
     def _make_new_pov(self, pov_node):
         self.observed_node = pov_node
-        new_point = HistoryPoint(self._session, pov_node, grouping=self.chb_grouping.isChecked())
+        new_point = HistoryPoint(self._storage, pov_node, grouping=self.chb_grouping.isChecked())
         self.pov_history.append(new_point)
         self.current_history_pos = len(self.pov_history) - 1
         self._toggle_pov_navigation_buttons()
@@ -434,7 +437,7 @@ class BrowseGraphWidget(BrowseWidget):
     # region public methods
     
     def query_node_data(self, node):
-        if self._session is None:
+        if self._storage is None:
             return
         self._make_new_pov(node)
     # endregion

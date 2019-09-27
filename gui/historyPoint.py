@@ -28,8 +28,8 @@ class HistoryPoint:
     представляющих его в виде таблицы и дерева.
     """
     
-    def __init__(self, session, initial_node, grouping=False):
-        self.graph = DpmGraph(session, initial_node)
+    def __init__(self, storage, initial_node, grouping=False):
+        self.graph = DpmGraph(storage, initial_node)
         self.pov_id = initial_node.id
         self.table_model = None
         self.tree_model = None

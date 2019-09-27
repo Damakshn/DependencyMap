@@ -133,10 +133,10 @@ class DpmMainWindow(QtWidgets.QMainWindow):
     def _browse_widget_changed(self):
         self._toggle_toolbar_actions()
 
-    def set_session(self, session):
-        self._session = session
+    def set_storage(self, storage):
+        self._storage = storage
         for widget in self._browse_widgets():
-            widget.set_session(self._session)
+            widget.set_storage(self._storage)
 
     def load_data(self, dataset):
         self.centralWidget().load_data(dataset)
@@ -147,14 +147,14 @@ class DpmMainWindow(QtWidgets.QMainWindow):
         """
         # не идёт дальше, если не задана сессия или
         # активен виджет, отличный от виджета обзора системы
-        if getattr(self, "_session") is None:
+        if getattr(self, "_storage") is None:
             return
         if self._container.currentIndex() != self._container.indexOf(self._browse_system_widget):
             return
         self._browse_system_widget.query_system_data()
 
 
-def init_gui(session):
+def init_gui(storage):
     # ToDo это временная функция для тестирования формирования интерфейса
     app = QtWidgets.QApplication([])
     # сюда надо передавать категории из обзора системы: армы и базы
@@ -162,7 +162,7 @@ def init_gui(session):
     # в том смысле, что он не должен ничего сам запрашивать, вся
     # функциональность по работе с бд должна быть вытащена вовне
     main_window = DpmMainWindow()
-    main_window.set_session(session)
+    main_window.set_storage(storage)
     main_window.query_system_data()
     main_window.showMaximized()
     sys.exit(app.exec_())
