@@ -3,6 +3,7 @@ import networkx as nx
 from .models import Node
 import settings
 from enum import IntEnum, auto
+import re
 
 
 """
@@ -153,6 +154,16 @@ class DpmGraph:
     def predecessors_of(self, node):
         return self.nx_graph.predecessors(node)
     
+    def search_node_by_label(self, node_label):
+        search_results = []
+        for node in self.nx_graph.node:
+            label = self.nx_graph.node[node]["label"]
+            if label is not None:
+                result = re.search(node_label, self.nx_graph.node[node]["label"])
+                if result is not None:
+                    search_results.append((node, result))
+        return search_results
+
     # endregion
 
     # region utility methods

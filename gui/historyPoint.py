@@ -121,6 +121,9 @@ class HistoryPoint:
         self.graph.show_node(node_id)
         self._update_node_statuses_in_models()
     
+    def search_node_by_label(self, node_label):
+        return self.graph.search_node_by_label(node_label)
+    
     # endregion
     
     # region utility methods

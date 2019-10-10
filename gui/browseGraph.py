@@ -15,16 +15,13 @@ class BrowseGraphWidget(BrowseWidget):
     Большой виджет, отвечающий за работу с графом зависимостей.
     """
     # region ToDO
-    # что же всё-таки передавать - ноду или id, абстрагирование от алхимии и сессий
     # большие фичи интерфейса:
     #   ToDo поиск
     #   ToDo фокус на объекте в таблице\дереве при поиске
-    #   ToDo событие выбора ноды в списке и его передача наверх
-    #   ToDo переход к новой точке отсчёта
+    #   ToDo итерация по результатам поиска в зависимости от активного виджета
     #   ToDo невозможность вызвать контекстное меню на точке отсчета в списке
     #   ToDo спрятанная вершина со спрятанным родителем тоже должна исчезнуть
     # структура кода:
-    #
     # Область отображения:
     #   ToDo узнать, можно ли добавить зум и другие плюшки
     #   ToDo надо увеличить размер области рисования, чтобы она занимала всё окно
@@ -114,7 +111,7 @@ class BrowseGraphWidget(BrowseWidget):
         self.node_context_menu = QtWidgets.QMenu()
 
         self.node_action_set_pov = QtWidgets.QAction(IconCollection.icons["new_pov"], "Сделать точкой отсчёта")
-        self.node_action_set_pov.triggered.connect(self._make_new_pov)
+        self.node_action_set_pov.triggered.connect(self._switch_to_new_pov)
 
         self.node_action_hide = QtWidgets.QAction(IconCollection.icons["invisible"], "Скрыть")
         self.node_action_hide.triggered.connect(self._hide_node)
@@ -199,11 +196,6 @@ class BrowseGraphWidget(BrowseWidget):
         self.table_view.horizontalHeader().hide()
         self.table_view.verticalHeader().hide()
 
-        """
-        self.table_view.selectionModel().selectionChanged.connect(self._process_row_selection)
-        self.tree_view.selectionModel().selectionChanged.connect(self._process_row_selection)
-        """
-
         self.node_list.addWidget(self.tree_view)
         self.node_list.addWidget(self.table_view)
         self.node_list.setCurrentIndex(self.node_list.indexOf(self.table_view))
@@ -233,13 +225,15 @@ class BrowseGraphWidget(BrowseWidget):
         self.node_context_menu.exec_(self.table_view.viewport().mapToGlobal(position))
     
     def _process_row_selection(self):
-        """
-        row_num = self.view.selectionModel().selectedRows()[0].row()
-        self.row_selected.emit()
-        """
-        #row_num = self._active_view.selectionModel().selectedRows()[0].row()
-        #self.selected_id = int(self.model.data(self.model.index(row_num, NodeListColumns.ID_COLUMN)))
-        pass
+        chosen_index = self._active_view.selectionModel().currentIndex()
+        model = self._active_view.model()
+        node_id = model.data(model.index(chosen_index.row(), NodeListColumns.ID_COLUMN, chosen_index.parent()))
+        # на выбор стрелки в дереве не реагируем
+        if node_id is None:
+            self._set_selected_node(None)
+        else:
+            node_id = int(node_id)
+            self._set_selected_node(self._storage.get_node_by_id(node_id))
 
     def _set_table_model(self, model):
         """
@@ -379,7 +373,17 @@ class BrowseGraphWidget(BrowseWidget):
         self.pov_history[self.current_history_pos].set_grouping_enagled(self.chb_grouping.isChecked())
 
     def _search_node_in_list(self):
-        pass
+        search_term = self.le_search.text()
+        search_result = self.pov_history[self.current_history_pos].search_node_by_label(search_term)
+        print(search_result)
+
+    def _bind_selection_signals(self):
+        self.table_view.selectionModel().selectionChanged.connect(self._process_row_selection)
+        self.tree_view.selectionModel().selectionChanged.connect(self._process_row_selection)
+    
+    def _switch_to_new_pov(self):
+        self._make_new_pov(self.selected_node)
+        
 
     def _make_new_pov(self, pov_node):
         self.observed_node = pov_node
@@ -389,6 +393,7 @@ class BrowseGraphWidget(BrowseWidget):
         self._toggle_pov_navigation_buttons()
         self._set_dependencies_loading_levels()
         self._reload_dependencies()
+        self._bind_selection_signals()
     
     def _hide_node(self):
         index = self._active_view.selectionModel().currentIndex()
