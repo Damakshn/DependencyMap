@@ -156,12 +156,12 @@ class DpmGraph:
     
     def search_node_by_label(self, node_label):
         search_results = []
-        for node in self.nx_graph.node:
-            label = self.nx_graph.node[node]["label"]
+        for node_id in self.nx_graph.node:
+            label = self.nx_graph.node[node_id]["label"]
             if label is not None:
-                result = re.search(node_label, self.nx_graph.node[node]["label"])
+                result = re.search(node_label, self.nx_graph.node[node_id]["label"])
                 if result is not None:
-                    search_results.append((node, result))
+                    search_results.append(node_id)
         return search_results
 
     # endregion

@@ -1,9 +1,9 @@
+import os
 from PySide2 import QtWidgets, QtGui, QtCore
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
 from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from .browse_widget import BrowseWidget
-import os
 import settings
 from dpm.graphsworks import DpmGraph, NodeStatus
 from .collection import IconCollection
@@ -36,6 +36,9 @@ class BrowseGraphWidget(BrowseWidget):
 
         self.current_history_pos = 0
         self.pov_history = []
+        self.last_search_request = ""
+        self.search_results = None
+        self.current_result_pos = 0
         layout = QtWidgets.QVBoxLayout()
 
         self.setLayout(layout)
@@ -160,7 +163,7 @@ class BrowseGraphWidget(BrowseWidget):
         # панель управления списком объектов (поиск и группировка)
         lb_search = QtWidgets.QLabel("Поиск:")
         self.le_search = QtWidgets.QLineEdit()
-        self.le_search.returnPressed.connect(self._search_node_in_list)
+        self.le_search.returnPressed.connect(self._handle_search)
         self.chb_grouping = QtWidgets.QCheckBox("Группировка")
         self.chb_grouping.stateChanged.connect(self._toggle_grouping)
 
@@ -372,10 +375,27 @@ class BrowseGraphWidget(BrowseWidget):
         self.node_list.setCurrentIndex(index)
         self.pov_history[self.current_history_pos].set_grouping_enagled(self.chb_grouping.isChecked())
 
-    def _search_node_in_list(self):
-        search_term = self.le_search.text()
-        search_result = self.pov_history[self.current_history_pos].search_node_by_label(search_term)
-        print(search_result)
+    def _handle_search(self):
+        search_term = self.le_search.text().strip()
+        if search_term == "":
+            QtWidgets.QMessageBox.about(self, "Ошибка", "Введите критерий поиска")
+            return
+        if search_term != self.last_search_request:
+            self.last_search_request = search_term
+            self.le_search.setText(self.last_search_request)
+            search_result = self.pov_history[self.current_history_pos].search_node_by_label(self.last_search_request)
+            self.search_results = search_result
+            self.current_result_pos = -1
+        self._move_to_next_search_result()
+
+    def _move_to_next_search_result(self):
+        if len(self.search_results) == 0:
+            QtWidgets.QMessageBox.about(self, "Результат поиска", "Ничего не найдено")
+            return
+        # зацикливаем индекс
+        self.current_result_pos = (self.current_result_pos + 1) % len(self.search_results)
+        next_node_id = self.search_results[self.current_result_pos]
+        QtWidgets.QMessageBox.about(self, "Результат поиска", f"id - {next_node_id}, {self.current_result_pos + 1} of {len(self.search_results)}")
 
     def _bind_selection_signals(self):
         self.table_view.selectionModel().selectionChanged.connect(self._process_row_selection)
