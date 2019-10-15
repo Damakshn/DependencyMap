@@ -30,6 +30,62 @@ import re
 # ToDo придумать, что делать со спрятанными вершинами при подгрузке зависимостей
 # ToDo настройки визуализации в config.json
 
+class GraphSearchResult:
+
+    def __init__(self, nodes=None):
+        if nodes is not None:
+            self.nodes = nodes
+        else:
+            self.nodes = []
+    
+    # region Proprties
+    @property
+    def total(self):
+        return len(self.nodes)
+    
+    @property
+    def id_list_full(self):
+        return [node["id"] for node in self.nodes]
+    
+    @property
+    def hidden_nodes(self):
+        return [node for node in self.nodes if node["status"] in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN)]
+
+    @property
+    def has_hidden(self):
+        return (len(self.hidden_nodes) > 0)
+
+    @property
+    def visible_nodes(self):
+        return [node for node in self.nodes if node["status"] not in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN)]
+
+    @property
+    def id_list_visible(self):
+        return [node["id"] for node in self.visible_nodes]
+
+    @property
+    def id_list_hidden(self):
+        return [node["id"] for node in self.hidden_nodes]
+    # endregion
+    
+    
+    def add_node(self, node):
+        self.nodes.append(node)
+    
+    
+    def __str__(self):
+        return f"Найдено {self.total} совпадений, из них {len(self.hidden_nodes)} скрытых"
+    
+    def __iter__(self):
+        return iter(self.nodes)
+    
+    def __getitem__(self, key):
+        return self.nodes[key]
+    
+    def __len__(self):
+        return len(self.nodes)
+
+
 class NodeStatus(IntEnum):
     NEW = 0
     VISIBLE = 1
@@ -155,14 +211,14 @@ class DpmGraph:
         return self.nx_graph.predecessors(node)
     
     def search_node_by_label(self, node_label):
-        search_results = []
+        search_result = GraphSearchResult()
         for node_id in self.nx_graph.node:
             label = self.nx_graph.node[node_id]["label"]
             if label is not None:
                 result = re.search(node_label, self.nx_graph.node[node_id]["label"])
                 if result is not None:
-                    search_results.append(node_id)
-        return search_results
+                    search_result.add_node(self.nx_graph.node[node_id])
+        return search_result
 
     # endregion
 

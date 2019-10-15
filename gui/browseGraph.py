@@ -17,6 +17,7 @@ class BrowseGraphWidget(BrowseWidget):
     # region ToDO
     # большие фичи интерфейса:
     #   ToDo поиск
+    #   ToDo обработка скрытых нод при поиске: выводить в описании результата, что есть скрытые ноды, кнопка "Показать", показ скрытых результатов
     #   ToDo фокус на объекте в таблице\дереве при поиске
     #   ToDo итерация по результатам поиска в зависимости от активного виджета
     #   ToDo невозможность вызвать контекстное меню на точке отсчета в списке
@@ -394,7 +395,7 @@ class BrowseGraphWidget(BrowseWidget):
             return
         # зацикливаем индекс
         self.current_result_pos = (self.current_result_pos + 1) % len(self.search_results)
-        next_node_id = self.search_results[self.current_result_pos]
+        next_node_id = self.search_results[self.current_result_pos]["id"]
         QtWidgets.QMessageBox.about(self, "Результат поиска", f"id - {next_node_id}, {self.current_result_pos + 1} of {len(self.search_results)}")
 
     def _bind_selection_signals(self):
