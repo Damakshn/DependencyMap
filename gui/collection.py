@@ -43,6 +43,8 @@ class IconCollection:
             "back": QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/back32.png")),
             "forward": QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/forward32.png")),
             "end": QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/end32.png")),
+            "up": QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/up.png")),
+            "down": QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/down.png")),
 
             "DBTable": QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/table.png")),
             "DBView": QtGui.QPixmap(os.path.join(settings.GUI_DIR, "assets/view.png")),

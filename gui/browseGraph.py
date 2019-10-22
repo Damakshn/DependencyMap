@@ -17,9 +17,10 @@ class BrowseGraphWidget(BrowseWidget):
     # region ToDO
     # большие фичи интерфейса:
     #   ToDo поиск
-    #   ToDo обработка скрытых нод при поиске: выводить в описании результата, что есть скрытые ноды, кнопка "Показать", показ скрытых результатов
-    #   ToDo фокус на объекте в таблице\дереве при поиске
-    #   ToDo итерация по результатам поиска в зависимости от активного виджета
+    #       ToDo обработка скрытых нод при поиске: выводить в описании результата, что есть скрытые ноды, кнопка "Показать", показ скрытых результатов
+    #       ToDo фокус на объекте в таблице\дереве при поиске
+    #       ToDo правильный перебор результатов, если они были показаны через контекстное меню в списке, проблема с нулевым индексом
+    #       ToDo перенос позиции в результате в класс SearchResult? (чтобы правильно показывать номер позиции в надписи на панели поиска)
     #   ToDo невозможность вызвать контекстное меню на точке отсчета в списке
     #   ToDo спрятанная вершина со спрятанным родителем тоже должна исчезнуть
     # структура кода:
@@ -28,6 +29,7 @@ class BrowseGraphWidget(BrowseWidget):
     #   ToDo надо увеличить размер области рисования, чтобы она занимала всё окно
     # дополнения
     #   ToDo выводить количество объектов в списке в виде Объектов: *, отображается: *
+    #   ToDo всплывающие подсказки для кнопок
     # на будущее
     #   ToDo экспорт графа в другие форматы
     # endregion
@@ -167,13 +169,31 @@ class BrowseGraphWidget(BrowseWidget):
         self.le_search.returnPressed.connect(self._handle_search)
         self.chb_grouping = QtWidgets.QCheckBox("Группировка")
         self.chb_grouping.stateChanged.connect(self._toggle_grouping)
+        self.bt_next_result = QtWidgets.QPushButton()
+        self.bt_next_result.setIcon(IconCollection.pixmaps["down"])
+        self.bt_next_result.clicked.connect(self._move_to_next_search_result)
+        self.bt_prev_result = QtWidgets.QPushButton()
+        self.bt_prev_result.clicked.connect(self._move_to_previous_search_result)
+        self.bt_prev_result.setIcon(IconCollection.pixmaps["up"])
+        self.search_result_text = QtWidgets.QLabel("")
+        self.bt_show_hidden_results = QtWidgets.QPushButton("Показать скрытое")
+        self.bt_show_hidden_results.setVisible(False)
 
         grid = QtWidgets.QGridLayout()
         grid.setColumnStretch(0, 1)
-        grid.setColumnStretch(1, 5)
+        grid.setColumnStretch(1, 8)
+        grid.setColumnStretch(2, 1)
+        grid.setColumnStretch(3, 1)
+        grid.setColumnStretch(4, 5)
+        grid.setColumnStretch(5, 2)
 
         grid.addWidget(lb_search, 0, 0)
         grid.addWidget(self.le_search, 0, 1)
+        grid.addWidget(self.bt_next_result, 0, 2)
+        grid.addWidget(self.bt_prev_result, 0, 3)
+        grid.addWidget(self.search_result_text, 0, 4)
+        grid.addWidget(self.bt_show_hidden_results, 0, 5)
+        
         grid.addWidget(self.chb_grouping, 1, 0, 1, 2)
 
         panel = QtWidgets.QWidget()
@@ -386,17 +406,35 @@ class BrowseGraphWidget(BrowseWidget):
             self.le_search.setText(self.last_search_request)
             search_result = self.pov_history[self.current_history_pos].search_node_by_label(self.last_search_request)
             self.search_results = search_result
-            self.current_result_pos = -1
-        self._move_to_next_search_result()
+            self.current_result_pos = 0
+            self._update_search_results()
+        self._focus_on_current_search_result()
+    
+    def _focus_on_current_search_result(self):
+        if self.search_results is None or len(self.search_results) == 0:
+            return
+        next_node_id = self.search_results[self.current_result_pos]["id"]
+        print(next_node_id)
+        QtWidgets.QMessageBox.about(self, "Результат поиска", f"id - {next_node_id}, {self.current_result_pos + 1} of {len(self.search_results)}")
 
     def _move_to_next_search_result(self):
-        if len(self.search_results) == 0:
-            QtWidgets.QMessageBox.about(self, "Результат поиска", "Ничего не найдено")
+        if self.search_results is None or len(self.search_results) == 0:
             return
         # зацикливаем индекс
         self.current_result_pos = (self.current_result_pos + 1) % len(self.search_results)
-        next_node_id = self.search_results[self.current_result_pos]["id"]
-        QtWidgets.QMessageBox.about(self, "Результат поиска", f"id - {next_node_id}, {self.current_result_pos + 1} of {len(self.search_results)}")
+        self._focus_on_current_search_result()
+    
+    def _move_to_previous_search_result(self):
+        if self.search_results is None or len(self.search_results) == 0:
+            return
+         # зацикливаем индекс
+        self.current_result_pos = (self.current_result_pos - 1 + len(self.search_results)) % len(self.search_results)
+        self._focus_on_current_search_result()
+    
+    def _update_search_results(self):
+        if self.search_results is not None:
+            self.search_result_text.setText(str(self.search_results))
+            self.bt_show_hidden_results.setVisible(self.search_results.has_hidden)
 
     def _bind_selection_signals(self):
         self.table_view.selectionModel().selectionChanged.connect(self._process_row_selection)
@@ -422,6 +460,7 @@ class BrowseGraphWidget(BrowseWidget):
         history_point.hide_node(index)
         self._prepare_view()
         self._draw_current_graph()
+        self._update_search_results()
     
     def _show_node(self):
         index = self._active_view.selectionModel().currentIndex()
@@ -429,6 +468,7 @@ class BrowseGraphWidget(BrowseWidget):
         history_point.show_node(index)
         self._prepare_view()
         self._draw_current_graph()
+        self._update_search_results()
 
     def _set_dependencies_loading_levels(self):
         """

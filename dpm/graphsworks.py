@@ -32,58 +32,55 @@ import re
 
 class GraphSearchResult:
 
-    def __init__(self, nodes=None):
+    def __init__(self, search_word, graph, nodes=None):
         if nodes is not None:
-            self.nodes = nodes
+            self.id_list_full = nodes
         else:
-            self.nodes = []
+            self.id_list_full = []
+        self.search_word = search_word
+        self.graph = graph
     
     # region Proprties
     @property
     def total(self):
-        return len(self.nodes)
+        return len(self.id_list_full)
+    
     
     @property
-    def id_list_full(self):
-        return [node["id"] for node in self.nodes]
-    
-    @property
-    def hidden_nodes(self):
-        return [node for node in self.nodes if node["status"] in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN)]
+    def hidden_ids(self):
+        return [id for id in self.id_list_full if self.graph[id]["status"] in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN)]
 
     @property
     def has_hidden(self):
-        return (len(self.hidden_nodes) > 0)
+        return (len(self.hidden_ids) > 0)
+
+    @property
+    def visible_ids(self):
+        return [id for id in self.id_list_full if self.graph[id]["status"] not in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN)]
 
     @property
     def visible_nodes(self):
-        return [node for node in self.nodes if node["status"] not in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN)]
+        return [self.graph[id] for id in self.visible_ids]
 
     @property
-    def id_list_visible(self):
-        return [node["id"] for node in self.visible_nodes]
-
-    @property
-    def id_list_hidden(self):
-        return [node["id"] for node in self.hidden_nodes]
+    def hidden_nodes(self):
+        return [self.graph[id] for id in self.hidden_ids]
     # endregion
     
-    
-    def add_node(self, node):
-        self.nodes.append(node)
-    
+    def add_node(self, node_id):
+        self.id_list_full.append(node_id)
     
     def __str__(self):
         return f"Найдено {self.total} совпадений, из них {len(self.hidden_nodes)} скрытых"
     
     def __iter__(self):
-        return iter(self.nodes)
+        return iter(self.visible_nodes)
     
     def __getitem__(self, key):
-        return self.nodes[key]
+        return self.visible_nodes[key]
     
     def __len__(self):
-        return len(self.nodes)
+        return len(self.visible_ids)
 
 
 class NodeStatus(IntEnum):
@@ -211,13 +208,13 @@ class DpmGraph:
         return self.nx_graph.predecessors(node)
     
     def search_node_by_label(self, node_label):
-        search_result = GraphSearchResult()
+        search_result = GraphSearchResult(node_label, self)
         for node_id in self.nx_graph.node:
             label = self.nx_graph.node[node_id]["label"]
             if label is not None:
                 result = re.search(node_label, self.nx_graph.node[node_id]["label"])
                 if result is not None:
-                    search_result.add_node(self.nx_graph.node[node_id])
+                    search_result.add_node(node_id)
         return search_result
 
     # endregion
