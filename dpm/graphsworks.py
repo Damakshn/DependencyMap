@@ -39,6 +39,7 @@ class GraphSearchResult:
             self.id_list_full = []
         self.search_word = search_word
         self.graph = graph
+        self.current_pos = 0
     
     # region Proprties
     @property
@@ -67,11 +68,41 @@ class GraphSearchResult:
         return [self.graph[id] for id in self.hidden_ids]
     # endregion
     
+    # region public methods
     def add_node(self, node_id):
         self.id_list_full.append(node_id)
     
+    def to_first(self):
+        self.current_pos = 0
+    
+    def to_next(self):
+        if len(self) == 0:
+            return
+        self.current_pos = (self.current_pos + 1) % len(self)
+
+    def to_previous(self):
+        if len(self) == 0:
+            return
+        self.current_pos = (self.current_pos - 1 + len(self)) % len(self)
+    
+    def get_current_match(self):
+        if len(self) == 0:
+            return None
+        return self[self.current_pos]
+    
+    # endregion
+    
+    # region dunder methods
     def __str__(self):
-        return f"Найдено {self.total} совпадений, из них {len(self.hidden_nodes)} скрытых"
+        if len(self) == 0:
+            if self.has_hidden:
+                return f"Найдено {len(self.hidden_ids)} скрытых совпадений"
+            else:
+                return "Совпадений не найдено"
+        elif self.has_hidden:
+            return f"{self.current_pos + 1}-е из {len(self)} совпадений ({len(self.hidden_ids)} скрыто)"
+        else:
+            return f"{self.current_pos + 1}-е из {len(self)} совпадений"
     
     def __iter__(self):
         return iter(self.visible_nodes)
@@ -81,6 +112,8 @@ class GraphSearchResult:
     
     def __len__(self):
         return len(self.visible_ids)
+    
+    # endregion
 
 
 class NodeStatus(IntEnum):

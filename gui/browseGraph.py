@@ -40,7 +40,7 @@ class BrowseGraphWidget(BrowseWidget):
         self.current_history_pos = 0
         self.pov_history = []
         self.last_search_request = ""
-        self.search_results = None
+        self.search_result = None
         self.current_result_pos = 0
         layout = QtWidgets.QVBoxLayout()
 
@@ -405,36 +405,35 @@ class BrowseGraphWidget(BrowseWidget):
             self.last_search_request = search_term
             self.le_search.setText(self.last_search_request)
             search_result = self.pov_history[self.current_history_pos].search_node_by_label(self.last_search_request)
-            self.search_results = search_result
+            self.search_result = search_result
             self.current_result_pos = 0
-            self._update_search_results()
+            self._update_search_result()
         self._focus_on_current_search_result()
     
     def _focus_on_current_search_result(self):
-        if self.search_results is None or len(self.search_results) == 0:
+        if self.search_result is None or len(self.search_result) == 0:
             return
-        next_node_id = self.search_results[self.current_result_pos]["id"]
-        print(next_node_id)
-        QtWidgets.QMessageBox.about(self, "Результат поиска", f"id - {next_node_id}, {self.current_result_pos + 1} of {len(self.search_results)}")
+        node = self.search_result.get_current_match()
+        next_node_id = node["id"]
+        QtWidgets.QMessageBox.about(self, "Результат поиска", f"id - {next_node_id}, {self.search_result.current_pos + 1} of {len(self.search_result)}")
 
     def _move_to_next_search_result(self):
-        if self.search_results is None or len(self.search_results) == 0:
+        if self.search_result is None or len(self.search_result) == 0:
             return
-        # зацикливаем индекс
-        self.current_result_pos = (self.current_result_pos + 1) % len(self.search_results)
+        self.search_result.to_next()
         self._focus_on_current_search_result()
+
     
     def _move_to_previous_search_result(self):
-        if self.search_results is None or len(self.search_results) == 0:
+        if self.search_result is None or len(self.search_result) == 0:
             return
-         # зацикливаем индекс
-        self.current_result_pos = (self.current_result_pos - 1 + len(self.search_results)) % len(self.search_results)
+        self.search_result.to_previous()
         self._focus_on_current_search_result()
     
-    def _update_search_results(self):
-        if self.search_results is not None:
-            self.search_result_text.setText(str(self.search_results))
-            self.bt_show_hidden_results.setVisible(self.search_results.has_hidden)
+    def _update_search_result(self):
+        if self.search_result is not None:
+            self.search_result_text.setText(str(self.search_result))
+            self.bt_show_hidden_results.setVisible(self.search_result.has_hidden)
 
     def _bind_selection_signals(self):
         self.table_view.selectionModel().selectionChanged.connect(self._process_row_selection)
@@ -460,7 +459,7 @@ class BrowseGraphWidget(BrowseWidget):
         history_point.hide_node(index)
         self._prepare_view()
         self._draw_current_graph()
-        self._update_search_results()
+        self._update_search_result()
     
     def _show_node(self):
         index = self._active_view.selectionModel().currentIndex()
@@ -468,7 +467,7 @@ class BrowseGraphWidget(BrowseWidget):
         history_point.show_node(index)
         self._prepare_view()
         self._draw_current_graph()
-        self._update_search_results()
+        self._update_search_result()
 
     def _set_dependencies_loading_levels(self):
         """
