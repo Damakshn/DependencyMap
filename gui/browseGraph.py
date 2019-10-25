@@ -7,7 +7,8 @@ from .browse_widget import BrowseWidget
 import settings
 from dpm.graphsworks import DpmGraph, NodeStatus
 from .collection import IconCollection
-from .historyPoint import HistoryPoint, NodeListColumns
+from .enums import NodeListColumns
+from .historyPoint import HistoryPoint
 
 
 class BrowseGraphWidget(BrowseWidget):
@@ -230,7 +231,7 @@ class BrowseGraphWidget(BrowseWidget):
         self.control_panel.layout().addWidget(self.number_of_nodes)
     
     # endregion
-    
+
     # region utility methods
 
     def _show_node_context_menu(self, position):
