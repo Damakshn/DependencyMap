@@ -5,8 +5,9 @@ from PySide2 import QtCore
 class QtSearchResult:
 
     """
-    Класс для перебора результатов поиска в графе. Позволяет переходить
-    от индекса к индексу в табличной и древовидной модели.
+    Класс для перебора результатов поиска в графе через интерфейс Qt. Позволяет переходить
+    от индекса к индексу в табличной и древовидной модели. Переходы по индексам взад-вперёд
+    зациклены.
     """
 
     def __init__(self, table_model, tree_model, grouping, result_list):
@@ -19,15 +20,22 @@ class QtSearchResult:
         self.pos_in_table = 0
         self.pos_in_tree = 0
         self._collect_indexes()
-    
+
     # region properties
-    
+
     @property
     def current_pos(self):
         if self._grouping:
             return self.pos_in_tree
         else:
             return self.pos_in_table
+    
+    @current_pos.setter
+    def current_pos(self, new_pos):
+        if self._grouping:
+            self.pos_in_tree = new_pos
+        else:
+            self.pos_in_table = new_pos
 
     @property
     def indexes(self):
@@ -39,11 +47,11 @@ class QtSearchResult:
     @property
     def index_list_visible(self):
         return [item["index"] for item in self.indexes if item["visible"]]
-    
+
     @property
     def index_list_hidden(self):
         return [item["index"] for item in self.indexes if not item["visible"]]
-    
+
     @property
     def has_hidden(self):
         return (len(self.index_list_hidden) > 0)
@@ -54,7 +62,6 @@ class QtSearchResult:
 
     def set_grouping_enabled(self, enabled):
         self._grouping = enabled
-        self._collect_indexes()
 
     def inspect(self):
         """table_buf = []
@@ -66,13 +73,25 @@ class QtSearchResult:
         print(self._tree_indexes)
     
     def refresh(self):
+        self.pos_in_table = 0
+        self.pos_in_tree = 0
         self._collect_indexes()
     
     def to_next(self):
-        pass
+        if len(self) == 0:
+            return
+        self.current_pos = (self.current_pos + 1) % len(self)
 
     def to_previous(self):
-        pass
+        if len(self) == 0:
+            return
+        self.current_pos = (self.current_pos - 1 + len(self)) % len(self)
+    
+    def get_current_match(self):
+        """
+        Возвращает индекс текущей ноды в модели, которая выбрана в данный момент.
+        """
+        return self.index_list_visible[self.current_pos]
     
     # endregion
 
@@ -81,7 +100,7 @@ class QtSearchResult:
     def _collect_indexes(self):
         """
         Собирает списки индексов обеих моделей, которые ссылаются на записи,
-        содержащие совпадения.
+        содержащие совпадения. Списки предварительно очищаются.
         """
         # каждый индекс пишется в соответствующий список в виде {"index": index, "visible": True/False}
         # собираем индексы табличной модели
@@ -114,7 +133,6 @@ class QtSearchResult:
             for row in range(item.rowCount()):
                 child_index = self._tree_model.index(row, 0, index)
                 stack.append(child_index)
-
     
     # endregion
 
@@ -133,8 +151,5 @@ class QtSearchResult:
             return f"{self.current_pos + 1}-е из {len(self)} совпадений ({len(self.index_list_hidden)} скрыто)"
         else:
             return f"{self.current_pos + 1}-е из {len(self)} совпадений"
-    
-    def __getitem__(self, key):
-        return self.index_list_visible[key]
-    
+
     # endregion

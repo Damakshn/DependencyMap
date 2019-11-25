@@ -233,22 +233,31 @@ class DpmGraph:
             {n:self.proxy_graph.node[n]["label"] for n in self.proxy_graph.node}, 
             font_size=6
         )
-    
+
     def successors_of(self, node):
         return self.nx_graph.successors(node)
 
     def predecessors_of(self, node):
         return self.nx_graph.predecessors(node)
     
-    def search_node_by_label(self, node_label):
-        search_result = GraphSearchResult(node_label, self)
+    def search_node(self, criterion):
+        result_list = []
         for node_id in self.nx_graph.node:
-            label = self.nx_graph.node[node_id]["label"]
-            if label is not None:
-                result = re.search(node_label, self.nx_graph.node[node_id]["label"])
-                if result is not None:
-                    search_result.add_node(node_id)
-        return search_result
+            match = []
+            for key in criterion:
+                if key == "label":
+                    label_match = False
+                    if self.nx_graph.node[node_id]["label"] is not None:
+                        result = re.search(criterion["label"], self.nx_graph.node[node_id]["label"])
+                        if result is not None:
+                            label_match = True
+                    match.append(label_match)
+                else:
+                    match.append(self.nx_graph.node[node_id][key] == criterion[key])
+            if all(match):
+                result_list.append(node_id)
+        print([self.nx_graph.node[node_id]["label"] for node_id in result_list])
+        return result_list
 
     # endregion
 

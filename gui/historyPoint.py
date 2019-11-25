@@ -19,6 +19,8 @@ class HistoryPoint:
         self._refresh_table_model()
         self._refresh_tree_model()
         self.grouping = grouping
+        self.last_search_request = ""
+        self.search_result = None
     
     # region properties
     @property
@@ -80,6 +82,10 @@ class HistoryPoint:
     def pov_node_label(self):
         return self.graph[self.pov_id]["label"]
     
+    @property
+    def has_iterable_search_result(self):
+        return (self.search_result is not None and len(self.search_result) > 0)
+    
     # endregion
     
     # region public methods
@@ -104,8 +110,10 @@ class HistoryPoint:
         self.graph.show_node(node_id)
         self._update_node_statuses_in_models()
     
-    def search_node_by_label(self, node_label):
-        return self.graph.search_node_by_label(node_label)
+    def do_search(self):
+        criterion = {"label": self.last_search_request}
+        result_list = self.graph.search_node(criterion)
+        self.search_result = QtSearchResult(self.table_model, self.tree_model, self.grouping, result_list)
     
     # endregion
     

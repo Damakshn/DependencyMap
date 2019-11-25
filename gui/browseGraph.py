@@ -40,9 +40,6 @@ class BrowseGraphWidget(BrowseWidget):
 
         self.current_history_pos = 0
         self.pov_history = []
-        self.last_search_request = ""
-        self.search_result = None
-        self.current_result_pos = 0
         layout = QtWidgets.QVBoxLayout()
 
         self.setLayout(layout)
@@ -178,6 +175,7 @@ class BrowseGraphWidget(BrowseWidget):
         self.bt_prev_result.setIcon(IconCollection.pixmaps["up"])
         self.search_result_text = QtWidgets.QLabel("")
         self.bt_show_hidden_results = QtWidgets.QPushButton("Показать скрытое")
+        self.bt_show_hidden_results.clicked.connect(self._show_hidden_results)
         self.bt_show_hidden_results.setVisible(False)
 
         grid = QtWidgets.QGridLayout()
@@ -309,31 +307,30 @@ class BrowseGraphWidget(BrowseWidget):
                 # если нода является видимой в списке, то обрабатываем её потомков
                 for child_row in range(tree_model.rowCount(parent=parent)):
                     stack.append(tree_model.index(child_row, 0, parent))
-        self.number_of_nodes.setText(f"Объектов: {self.pov_history[self.current_history_pos].number_of_nodes_in_list}")
+        self.number_of_nodes.setText(f"Объектов: {self.state.number_of_nodes_in_list}")
     
     def _read_graph_from_history(self):
         """
         Читает граф из текущей позиции в истории, заполняет значения виджетов значениями
         из атрибутов графа и выводит граф в области для отображения.
         """
-        history_point = self.pov_history[self.current_history_pos]
-        self._set_table_model(history_point.table_model)
-        self._set_tree_model(history_point.tree_model)
-        self.chb_grouping.setChecked(history_point.grouping)
+        self._set_table_model(self.state.table_model)
+        self._set_tree_model(self.state.tree_model)
+        self.chb_grouping.setChecked(self.state.grouping)
         self._prepare_view()
         # считываем из текущего графа параметры загрузки зависимостей
         # и ставим их в элементы управления на форме
-        self.chb_down.setChecked(history_point.reached_bottom_limit)
-        self.chb_up.setChecked(history_point.reached_upper_limit)
-        self.spb_down.setValue(history_point.levels_down)
-        self.spb_up.setValue(history_point.levels_up)
+        self.chb_down.setChecked(self.state.reached_bottom_limit)
+        self.chb_up.setChecked(self.state.reached_upper_limit)
+        self.spb_down.setValue(self.state.levels_down)
+        self.spb_up.setValue(self.state.levels_up)
         # количество объектов (под списком)
-        self.number_of_nodes.setText(f"Объектов: {history_point.number_of_nodes_in_list}")
+        self.number_of_nodes.setText(f"Объектов: {self.state.number_of_nodes_in_list}")
         # иконка pov-вершины
         self.pov_icon.setPixmap(
-            IconCollection.get_pixmap_for_node_class(history_point.pov_node_class)
+            IconCollection.get_pixmap_for_node_class(self.state.pov_node_class)
         )
-        self.pov_label.setText(history_point.pov_node_label)
+        self.pov_label.setText(self.state.pov_node_label)
         self._draw_current_graph()
 
     def _reload_dependencies(self):
@@ -343,9 +340,8 @@ class BrowseGraphWidget(BrowseWidget):
         """
         levels_up = self.spb_up.value()
         levels_down = self.spb_down.value()
-        history_point = self.pov_history[self.current_history_pos]
         QtGui.QGuiApplication.setOverrideCursor(QtGui.Qt.BusyCursor)
-        history_point.load_dependencies(levels_up, levels_down)
+        self.state.load_dependencies(levels_up, levels_down)
         self._read_graph_from_history()
         self._draw_current_graph()
         QtGui.QGuiApplication.restoreOverrideCursor()
@@ -355,7 +351,7 @@ class BrowseGraphWidget(BrowseWidget):
         Отображает текущий граф в области для рисования.
         """
         self.figure.clf()
-        self.pov_history[self.current_history_pos].show_graph()
+        self.state.show_graph()
         self.canvas.draw_idle()
 
     def _change_pov(self, button):
@@ -395,46 +391,46 @@ class BrowseGraphWidget(BrowseWidget):
         else:
             index = self.node_list.indexOf(self.table_view)
         self.node_list.setCurrentIndex(index)
-        self.pov_history[self.current_history_pos].set_grouping_enagled(self.chb_grouping.isChecked())
+        self.state.set_grouping_enagled(self.chb_grouping.isChecked())
 
     def _handle_search(self):
         search_term = self.le_search.text().strip()
         if search_term == "":
             QtWidgets.QMessageBox.about(self, "Ошибка", "Введите критерий поиска")
             return
-        if search_term != self.last_search_request:
-            self.last_search_request = search_term
-            self.le_search.setText(self.last_search_request)
-            search_result = self.pov_history[self.current_history_pos].search_node_by_label(self.last_search_request)
-            self.search_result = search_result
-            self.current_result_pos = 0
+        if search_term != self.state.last_search_request:
+            self.state.last_search_request = search_term
+            self.le_search.setText(self.state.last_search_request)
+            self.state.do_search()
             self._update_search_result()
         self._focus_on_current_search_result()
     
     def _focus_on_current_search_result(self):
-        if self.search_result is None or len(self.search_result) == 0:
+        if not self.state.has_iterable_search_result:
             return
-        node = self.search_result.get_current_match()
-        next_node_id = node["id"]
-        QtWidgets.QMessageBox.about(self, "Результат поиска", f"id - {next_node_id}, {self.search_result.current_pos + 1} of {len(self.search_result)}")
+        index = self.state.search_result.get_current_match()
+        self.table_view.scrollTo(index)
 
     def _move_to_next_search_result(self):
-        if self.search_result is None or len(self.search_result) == 0:
+        if not self.state.has_iterable_search_result:
             return
-        self.search_result.to_next()
+        self.state.search_result.to_next()
         self._focus_on_current_search_result()
 
     
     def _move_to_previous_search_result(self):
-        if self.search_result is None or len(self.search_result) == 0:
+        if not self.state.has_iterable_search_result:
             return
-        self.search_result.to_previous()
+        self.state.search_result.to_previous()
         self._focus_on_current_search_result()
     
     def _update_search_result(self):
-        if self.search_result is not None:
-            self.search_result_text.setText(str(self.search_result))
-            self.bt_show_hidden_results.setVisible(self.search_result.has_hidden)
+        if self.state.search_result is not None:
+            self.search_result_text.setText(str(self.state.search_result))
+            self.bt_show_hidden_results.setVisible(self.state.search_result.has_hidden)
+    
+    def _show_hidden_results(self):
+        print(f"Show hidden results!")
 
     def _bind_selection_signals(self):
         self.table_view.selectionModel().selectionChanged.connect(self._process_row_selection)
@@ -456,16 +452,14 @@ class BrowseGraphWidget(BrowseWidget):
     
     def _hide_node(self):
         index = self._active_view.selectionModel().currentIndex()
-        history_point = self.pov_history[self.current_history_pos]
-        history_point.hide_node(index)
+        self.state.hide_node(index)
         self._prepare_view()
         self._draw_current_graph()
         self._update_search_result()
     
     def _show_node(self):
         index = self._active_view.selectionModel().currentIndex()
-        history_point = self.pov_history[self.current_history_pos]
-        history_point.show_node(index)
+        self.state.show_node(index)
         self._prepare_view()
         self._draw_current_graph()
         self._update_search_result()
@@ -498,6 +492,10 @@ class BrowseGraphWidget(BrowseWidget):
         else:
             return self.table_view
     
+    @property
+    def state(self):
+        return None if len(self.pov_history) == 0 else self.pov_history[self.current_history_pos]
+
     # endregion
 
     # region public methods
