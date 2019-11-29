@@ -115,6 +115,9 @@ class HistoryPoint:
         result_list = self.graph.search_node(criterion)
         self.search_result = QtSearchResult(self.table_model, self.tree_model, self.grouping, result_list)
     
+    def show_hidden_results(self):
+        pass
+    
     # endregion
     
     # region utility methods

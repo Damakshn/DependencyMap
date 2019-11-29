@@ -408,8 +408,10 @@ class BrowseGraphWidget(BrowseWidget):
     def _focus_on_current_search_result(self):
         if not self.state.has_iterable_search_result:
             return
+        self.search_result_text.setText(str(self.state.search_result))
         index = self.state.search_result.get_current_match()
-        self.table_view.scrollTo(index)
+        self.table_view.selectRow(index.row())
+        self.table_view.scrollTo(index, QtWidgets.QTableView.PositionAtCenter)
 
     def _move_to_next_search_result(self):
         if not self.state.has_iterable_search_result:
@@ -430,7 +432,7 @@ class BrowseGraphWidget(BrowseWidget):
             self.bt_show_hidden_results.setVisible(self.state.search_result.has_hidden)
     
     def _show_hidden_results(self):
-        print(f"Show hidden results!")
+        self.state.show_hidden_results()
 
     def _bind_selection_signals(self):
         self.table_view.selectionModel().selectionChanged.connect(self._process_row_selection)

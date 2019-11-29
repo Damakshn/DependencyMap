@@ -109,8 +109,8 @@ class QtSearchResult:
             id = int(self._table_model.data(self._table_model.index(row, NodeListColumns.ID_COLUMN)))
             if id in self._result_list:
                 self._table_indexes.append({
-                    "index": self._table_model.index(row, NodeListColumns.ID_COLUMN),
-                    "visible": (int(self._table_model.data(self._table_model.index(row, NodeListColumns.STATUS_COLUMN))) == NodeStatus.VISIBLE)
+                    "index": self._table_model.index(row, NodeListColumns.NAME_COLUMN),
+                    "visible": (int(self._table_model.data(self._table_model.index(row, NodeListColumns.STATUS_COLUMN))) in (NodeStatus.VISIBLE, NodeStatus.NEW))
                 })
         # индексы древовидной модели
         self._tree_indexes.clear()

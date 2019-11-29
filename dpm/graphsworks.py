@@ -256,7 +256,6 @@ class DpmGraph:
                     match.append(self.nx_graph.node[node_id][key] == criterion[key])
             if all(match):
                 result_list.append(node_id)
-        print([self.nx_graph.node[node_id]["label"] for node_id in result_list])
         return result_list
 
     # endregion
