@@ -3,14 +3,14 @@ from PySide2 import QtWidgets, QtGui, QtCore
 from .collection import IconCollection
 from .enums import NodeListColumns, TreeDirection
 from .search_result import QtSearchResult
-        
+
 
 class HistoryPoint:
     """
     Класс-обёртка для графа зависимостей и моделей данных PyQt,
     представляющих его в виде таблицы и дерева.
     """
-    
+
     def __init__(self, storage, initial_node, grouping=False):
         self.graph = DpmGraph(storage, initial_node)
         self.pov_id = initial_node.id
@@ -21,7 +21,7 @@ class HistoryPoint:
         self.grouping = grouping
         self.last_search_request = ""
         self.search_result = None
-    
+
     # region properties
     @property
     def active_model(self):
@@ -29,101 +29,104 @@ class HistoryPoint:
             return self.tree_model
         else:
             return self.table_model
-    
+
     @property
     def number_of_nodes_in_list(self):
         """
         Количество вершин, отображаемых в списке.
         """
         return self.graph.number_of_subordinate_nodes - len(self.graph.auto_hidden_nodes)
-    
+
     @property
     def number_of_auto_hidden_nodes(self):
         """
-        Количество вершин, скрытых автоматически при скрытии вершины пользователем.
+        Количество вершин, скрытых автоматически при скрытии
+        вершины пользователем.
         """
         return len(self.graph.auto_hidden_nodes)
-    
+
     @property
     def total_number_of_nodes(self):
         """
         Сколько всего вершин в графе
         """
         return len(self.graph.nodes)
-    
+
     @property
     def number_of_subordinate_nodes(self):
         """
         Количество подчинённых вершин (за вычетом точки отсчёта)
         """
         self.graph.number_of_subordinate_nodes
-    
+
     @property
     def levels_down(self):
         return self.graph.levels_down
-    
+
     @property
     def levels_up(self):
         return self.graph.levels_up
-    
+
     @property
     def reached_bottom_limit(self):
         return self.graph.reached_bottom_limit
-    
+
     @property
     def reached_upper_limit(self):
         return self.graph.reached_upper_limit
-    
+
     @property
     def pov_node_class(self):
         return self.graph[self.pov_id]["node_class"]
-    
+
     @property
     def pov_node_label(self):
         return self.graph[self.pov_id]["label"]
-    
+
     @property
     def has_iterable_search_result(self):
         return (self.search_result is not None and len(self.search_result) > 0)
-    
+
     # endregion
-    
+
     # region public methods
     def load_dependencies(self, up, down):
         self.graph.load_dependencies(levels_up=up, levels_down=down)
         self._refresh_table_model()
         self._refresh_tree_model()
-    
+
     def set_grouping_enagled(self, enabled):
         self.grouping = enabled
 
     def show_graph(self):
         self.graph.show()
-    
+
     def hide_node(self, model_index):
         node_id = int(self.active_model.data(self.active_model.index(model_index.row(), NodeListColumns.ID_COLUMN, model_index.parent())))
         self.graph.hide_node(node_id)
         self._update_node_statuses_in_models()
-    
+
     def show_node(self, model_index):
         node_id = int(self.active_model.data(self.active_model.index(model_index.row(), NodeListColumns.ID_COLUMN, model_index.parent())))
         self.graph.show_node(node_id)
         self._update_node_statuses_in_models()
-    
+
     def do_search(self):
         criterion = {"label": self.last_search_request}
         result_list = self.graph.search_node(criterion)
         self.search_result = QtSearchResult(self.table_model, self.tree_model, self.grouping, result_list)
-    
-    def show_hidden_results(self):
-        pass
-    
+
+    def show_hidden_search_results(self):
+        self.graph.reveal_hidden_nodes(self.search_result.result_list)
+        self._update_node_statuses_in_models()
+
     # endregion
-    
+
     # region utility methods
     def _refresh_table_model(self):
         """
-        Полностью обновляет табличную модель на основе графа при подгрузке зависимостей.
+        Полностью обновляет табличную модель на основе графа при
+        подгрузке зависимостей.
         """
         if self.table_model is None:
             self.table_model = QtGui.QStandardItemModel()
@@ -141,7 +144,8 @@ class HistoryPoint:
 
     def _refresh_tree_model(self):
         """
-        Полностью обновляет древовидную модель на основе графа при подгрузке зависимостей.
+        Полностью обновляет древовидную модель на основе графа при
+        подгрузке зависимостей.
         """
         if self.tree_model is None:
             self.tree_model = QtGui.QStandardItemModel()
@@ -150,10 +154,12 @@ class HistoryPoint:
         self.tree_model.setHorizontalHeaderLabels([column["header"] for column in NodeListColumns.structure])
         root_item = self.tree_model.invisibleRootItem()
         root_item.appendRow(self._create_tree_row_from_node(self.pov_id, TreeDirection.BOTH))
-        # древовидная модель сложнее табличной, после её заполнения данными из графа
-        # нужно дополнительно пройти по вершинам и расставить им правильные статусы
+        # древовидная модель сложнее табличной, после её заполнения данными
+        # из графа
+        # нужно дополнительно пройти по вершинам и расставить им
+        # правильные статусы
         self._update_statuses_in_tree_model()
-    
+
     def _create_tree_row_from_node(self, node_id, direction):
         new_row = self._create_model_row_from_node(node_id)
         row_anchor = new_row[0]
@@ -185,14 +191,14 @@ class HistoryPoint:
             for node_id in fitem["node_list"]:
                 item_anchor.appendRow(self._create_tree_row_from_node(node_id, fitem["direction"]))
         return new_row
-    
+
     def _create_model_row_from_node(self, node_id):
         icon = QtGui.QStandardItem(IconCollection.get_icon_for_node_class(self.graph[node_id]["node_class"]), "")
         id = QtGui.QStandardItem(str(self.graph[node_id]["id"]))
         name = QtGui.QStandardItem(self.graph[node_id]["label"])
         status = QtGui.QStandardItem(str(int(self.graph[node_id]["status"])))
         return [icon, id, name, status]
-    
+
     def _update_node_statuses_in_models(self):
         """
         Метод, обновляющий статусы вершин в моделях данных в те моменты,
@@ -208,13 +214,14 @@ class HistoryPoint:
                 self._paint_row_as_rolled_up(self.table_model, row)
         # деревянная модель
         self._update_statuses_in_tree_model()
-    
+
     def _update_statuses_in_tree_model(self):
         """
         Обновляет статусы объектов в древовидной модели.
         Дерево не является линейной структурой и один объект может
-        встречаться в разных местах многократно, плюс у древовидного представления
-        есть служебные строки (со стрелками), для группировки объектов по направлению связи (вниз и вверх).
+        встречаться в разных местах многократно, плюс у древовидного
+        представления есть служебные строки (со стрелками),
+        для группировки объектов по направлению связи (вниз и вверх).
         """
         root = self.tree_model.index(0, 0)
         stack = []
@@ -249,7 +256,7 @@ class HistoryPoint:
             for row in range(item.rowCount()):
                 child_index = self.tree_model.index(row, 0, next_index)
                 stack.append(child_index)
-    
+
     def _paint_row_as_rolled_up(self, model, row, parent=QtCore.QModelIndex()):
         item = model.itemFromIndex(model.index(row, 0, parent))
         item.setEnabled(False)

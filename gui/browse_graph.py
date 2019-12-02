@@ -110,7 +110,7 @@ class BrowseGraphWidget(BrowseWidget):
         groupbox.setLayout(grid)
         groupbox.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
         self.control_panel.layout().addWidget(groupbox)
-    
+
     def _init_node_context_menu(self):
         self.node_context_menu = QtWidgets.QMenu()
 
@@ -192,14 +192,13 @@ class BrowseGraphWidget(BrowseWidget):
         grid.addWidget(self.bt_prev_result, 0, 3)
         grid.addWidget(self.search_result_text, 0, 4)
         grid.addWidget(self.bt_show_hidden_results, 0, 5)
-        
         grid.addWidget(self.chb_grouping, 1, 0, 1, 2)
 
         panel = QtWidgets.QWidget()
         panel.setLayout(grid)
         panel.setSizePolicy(QtWidgets.QSizePolicy.Minimum, QtWidgets.QSizePolicy.Fixed)
         self.control_panel.layout().addWidget(panel)
-    
+
     def _init_node_list(self):
         """
         Инициализирует виджеты, отвечающие за вывод списка вершин графа.
@@ -227,7 +226,7 @@ class BrowseGraphWidget(BrowseWidget):
 
         self.number_of_nodes = QtWidgets.QLabel(f"Объектов: ")
         self.control_panel.layout().addWidget(self.number_of_nodes)
-    
+
     # endregion
 
     # region utility methods
@@ -244,9 +243,8 @@ class BrowseGraphWidget(BrowseWidget):
             self.node_context_menu.addAction(self.node_action_show)
         else:
             self.node_context_menu.addAction(self.node_action_hide)
-        
         self.node_context_menu.exec_(self.table_view.viewport().mapToGlobal(position))
-    
+
     def _process_row_selection(self):
         chosen_index = self._active_view.selectionModel().currentIndex()
         model = self._active_view.model()
@@ -272,9 +270,7 @@ class BrowseGraphWidget(BrowseWidget):
         Устанавливает древовидную модель для виджета со списком вершин графа.
         """
         self.tree_view.setModel(model)
-        #for column in range(len(NodeListColumns.structure)):
-            #self.tree_view.setColumnHidden(column, NodeListColumns.structure[column]["hidden"])
-    
+
     def _prepare_view(self):
         # прячем в списке те объекты, которые были скрыты автоматически
         table_model = self.table_view.model()
@@ -283,7 +279,6 @@ class BrowseGraphWidget(BrowseWidget):
                 row,
                 int(table_model.index(row, NodeListColumns.STATUS_COLUMN).data()) == NodeStatus.AUTO_HIDDEN
             )
-        
         # деревянная модель
         tree_model = self.tree_view.model()
         stack = []
@@ -304,15 +299,17 @@ class BrowseGraphWidget(BrowseWidget):
             else:
                 for child_row in range(tree_model.rowCount(parent)):
                     self.tree_view.setRowHidden(child_row, parent, False)
-                # если нода является видимой в списке, то обрабатываем её потомков
+                # если нода является видимой в списке, то обрабатываем 
+                # её потомков
                 for child_row in range(tree_model.rowCount(parent=parent)):
                     stack.append(tree_model.index(child_row, 0, parent))
         self.number_of_nodes.setText(f"Объектов: {self.state.number_of_nodes_in_list}")
-    
+
     def _read_graph_from_history(self):
         """
-        Читает граф из текущей позиции в истории, заполняет значения виджетов значениями
-        из атрибутов графа и выводит граф в области для отображения.
+        Читает граф из текущей позиции в истории, заполняет значения
+        виджетов значениями из атрибутов графа и выводит граф в
+        области для отображения.
         """
         self._set_table_model(self.state.table_model)
         self._set_tree_model(self.state.tree_model)
@@ -335,7 +332,8 @@ class BrowseGraphWidget(BrowseWidget):
 
     def _reload_dependencies(self):
         """
-        Подгружает уровни зависимости объекта, изменяет текущий граф, изменяет модели
+        Подгружает уровни зависимости объекта, изменяет текущий граф,
+        изменяет модели
         для отображения списка в виде таблицы или дерева.
         """
         levels_up = self.spb_up.value()
@@ -357,9 +355,11 @@ class BrowseGraphWidget(BrowseWidget):
     def _change_pov(self, button):
         """
         движение по истории точек отсчёта
-        в зависимости от того, какая кнопка была нажата, двигается вперёд, назада, в начало или в конец
-        если достигнуто начало истории просмотров, то кнопки "в начало" и "назад" выключаются, если 
-        достигнут конец, то выключаются кнопки "Вперёд" и "в конец".
+        в зависимости от того, какая кнопка была нажата, двигается вперёд,
+        назад, в начало или в конец;
+        если достигнуто начало истории просмотров, то кнопки "в начало" и
+        "назад" выключаются, если достигнут конец, то выключаются кнопки
+        "Вперёд" и "в конец".
         """
         if button == self.pov_first:
             self.current_history_pos = 0
@@ -384,7 +384,8 @@ class BrowseGraphWidget(BrowseWidget):
 
     def _toggle_grouping(self):
         """
-        Переключает группировку, подменяя виджеты и устанавливая активное представление
+        Переключает группировку, подменяя виджеты и устанавливая
+        активное представление
         """
         if self.chb_grouping.isChecked():
             index = self.node_list.indexOf(self.tree_view)
@@ -404,7 +405,7 @@ class BrowseGraphWidget(BrowseWidget):
             self.state.do_search()
             self._update_search_result()
         self._focus_on_current_search_result()
-    
+
     def _focus_on_current_search_result(self):
         if not self.state.has_iterable_search_result:
             return
@@ -419,28 +420,28 @@ class BrowseGraphWidget(BrowseWidget):
         self.state.search_result.to_next()
         self._focus_on_current_search_result()
 
-    
     def _move_to_previous_search_result(self):
         if not self.state.has_iterable_search_result:
             return
         self.state.search_result.to_previous()
         self._focus_on_current_search_result()
-    
+
     def _update_search_result(self):
         if self.state.search_result is not None:
             self.search_result_text.setText(str(self.state.search_result))
             self.bt_show_hidden_results.setVisible(self.state.search_result.has_hidden)
-    
+
     def _show_hidden_results(self):
-        self.state.show_hidden_results()
+        self.state.show_hidden_search_results()
+        self._prepare_view()
+        self._draw_current_graph()
 
     def _bind_selection_signals(self):
         self.table_view.selectionModel().selectionChanged.connect(self._process_row_selection)
         self.tree_view.selectionModel().selectionChanged.connect(self._process_row_selection)
-    
+
     def _switch_to_new_pov(self):
         self._make_new_pov(self.selected_node)
-        
 
     def _make_new_pov(self, pov_node):
         self.observed_node = pov_node
@@ -451,14 +452,14 @@ class BrowseGraphWidget(BrowseWidget):
         self._set_dependencies_loading_levels()
         self._reload_dependencies()
         self._bind_selection_signals()
-    
+
     def _hide_node(self):
         index = self._active_view.selectionModel().currentIndex()
         self.state.hide_node(index)
         self._prepare_view()
         self._draw_current_graph()
         self._update_search_result()
-    
+
     def _show_node(self):
         index = self._active_view.selectionModel().currentIndex()
         self.state.show_node(index)
@@ -469,7 +470,7 @@ class BrowseGraphWidget(BrowseWidget):
     def _set_dependencies_loading_levels(self):
         """
         По типу ноды определяем рекомендуемое количество уровней
-        зависимостей для загрузки, выставляем виджеты управления 
+        зависимостей для загрузки, выставляем виджеты управления
         в соответствующее положение.
         """
         up, down = self.observed_node.get_recommended_loading_depth()
@@ -483,9 +484,8 @@ class BrowseGraphWidget(BrowseWidget):
             self.chb_down.setChecked(True)
         else:
             self.spb_down.setValue(down)
-    
     # endregion
-    
+
     # region properties
     @property
     def _active_view(self):
@@ -493,7 +493,7 @@ class BrowseGraphWidget(BrowseWidget):
             return self.tree_view
         else:
             return self.table_view
-    
+
     @property
     def state(self):
         return None if len(self.pov_history) == 0 else self.pov_history[self.current_history_pos]
@@ -501,7 +501,7 @@ class BrowseGraphWidget(BrowseWidget):
     # endregion
 
     # region public methods
-    
+
     def query_node_data(self, node):
         if self._storage is None:
             return

@@ -2,12 +2,13 @@ from .enums import NodeListColumns
 from dpm.graphsworks import NodeStatus
 from PySide2 import QtCore
 
+
 class QtSearchResult:
 
     """
-    Класс для перебора результатов поиска в графе через интерфейс Qt. Позволяет переходить
-    от индекса к индексу в табличной и древовидной модели. Переходы по индексам взад-вперёд
-    зациклены.
+    Класс для перебора результатов поиска в графе через интерфейс Qt.
+    Позволяет переходить от индекса к индексу в табличной и
+    древовидной модели. Переходы по индексам взад-вперёд зациклены.
     """
 
     def __init__(self, table_model, tree_model, grouping, result_list):
@@ -29,7 +30,7 @@ class QtSearchResult:
             return self.pos_in_tree
         else:
             return self.pos_in_table
-    
+
     @current_pos.setter
     def current_pos(self, new_pos):
         if self._grouping:
@@ -55,7 +56,11 @@ class QtSearchResult:
     @property
     def has_hidden(self):
         return (len(self.index_list_hidden) > 0)
-    
+
+    @property
+    def result_list(self):
+        return list(self._result_list)
+
     # endregion
 
     # region public methods
@@ -63,20 +68,11 @@ class QtSearchResult:
     def set_grouping_enabled(self, enabled):
         self._grouping = enabled
 
-    def inspect(self):
-        """table_buf = []
-        for row in range(self._table_model.rowCount()):
-            index = self._table_model.index(row, NodeListColumns.ID_COLUMN)
-            id = int(self._table_model.data(index))
-            if id in self._result_list:
-                table_buf.append(index)"""
-        print(self._tree_indexes)
-    
     def refresh(self):
         self.pos_in_table = 0
         self.pos_in_tree = 0
         self._collect_indexes()
-    
+
     def to_next(self):
         if len(self) == 0:
             return
@@ -86,23 +82,25 @@ class QtSearchResult:
         if len(self) == 0:
             return
         self.current_pos = (self.current_pos - 1 + len(self)) % len(self)
-    
+
     def get_current_match(self):
         """
-        Возвращает индекс текущей ноды в модели, которая выбрана в данный момент.
+        Возвращает индекс текущей ноды в модели, которая выбрана в
+        данный момент.
         """
         return self.index_list_visible[self.current_pos]
-    
+
     # endregion
 
     # region private methods
-    
+
     def _collect_indexes(self):
         """
         Собирает списки индексов обеих моделей, которые ссылаются на записи,
         содержащие совпадения. Списки предварительно очищаются.
         """
-        # каждый индекс пишется в соответствующий список в виде {"index": index, "visible": True/False}
+        # каждый индекс пишется в соответствующий список в виде
+        # {"index": index, "visible": True/False}
         # собираем индексы табличной модели
         self._table_indexes.clear()
         for row in range(self._table_model.rowCount()):
@@ -133,14 +131,14 @@ class QtSearchResult:
             for row in range(item.rowCount()):
                 child_index = self._tree_model.index(row, 0, index)
                 stack.append(child_index)
-    
+
     # endregion
 
     # region dunder methods
-    
+
     def __len__(self):
         return len(self.index_list_visible)
-    
+
     def __str__(self):
         if len(self) == 0:
             if self.has_hidden:

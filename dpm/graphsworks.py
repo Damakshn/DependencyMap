@@ -12,23 +12,27 @@ import re
 Полученные таким образом графы могут быть использованы для вывода данных в GUI
 или для анализа данных;
 
-При формировании графа все вершины и рёбра должны быть размечены определённым образом:
+При формировании графа все вершины и рёбра должны быть
+размечены определённым образом:
 
 Атрибуты вершин:
     node_class - содержит класс ORM-модели;
     node_id - id ноды из базы;
 
 Атрибуты рёбер:
-    select, insert, update, delete, exec, drop, truncate, contain, trigger, calc - ставится True/False, показывает набор операций, которые
+    select, insert, update, delete, exec, drop, truncate, contain, trigger,
+    calc - ставится True/False, показывает набор операций, которые
     объект A осуществляет с объектом B.
 
-Атрибуты нужны для того, чтобы при обработке графа можно было отличить, например, ноду таблицы
-от ноды формы, правильно визуализировать связи нужных типов, дозапрашивать данные из базы по id объекта.
+Атрибуты нужны для того, чтобы при обработке графа можно было отличить,
+например, ноду таблицы от ноды формы, правильно визуализировать связи
+нужных типов, дозапрашивать данные из базы по id объекта.
 """
 
 # ToDo сделать послойную загрузку зависимостей вместо повершинной
 # ToDo придумать, что делать со спрятанными вершинами при подгрузке зависимостей
 # ToDo настройки визуализации в config.json
+
 
 class GraphSearchResult:
 
@@ -40,7 +44,7 @@ class GraphSearchResult:
         self.search_word = search_word
         self.graph = graph
         self.current_pos = 0
-    
+
     # region Proprties
     @property
     def total(self):
@@ -67,14 +71,14 @@ class GraphSearchResult:
     def hidden_nodes(self):
         return [self.graph[id] for id in self.hidden_ids]
     # endregion
-    
+
     # region public methods
     def add_node(self, node_id):
         self.id_list_full.append(node_id)
-    
+
     def to_first(self):
         self.current_pos = 0
-    
+
     def to_next(self):
         if len(self) == 0:
             return
@@ -84,14 +88,14 @@ class GraphSearchResult:
         if len(self) == 0:
             return
         self.current_pos = (self.current_pos - 1 + len(self)) % len(self)
-    
+
     def get_current_match(self):
         if len(self) == 0:
             return None
         return self[self.current_pos]
-    
+
     # endregion
-    
+
     # region dunder methods
     def __str__(self):
         if len(self) == 0:
@@ -103,16 +107,16 @@ class GraphSearchResult:
             return f"{self.current_pos + 1}-е из {len(self)} совпадений ({len(self.hidden_ids)} скрыто)"
         else:
             return f"{self.current_pos + 1}-е из {len(self)} совпадений"
-    
+
     def __iter__(self):
         return iter(self.visible_nodes)
-    
+
     def __getitem__(self, key):
         return self.visible_nodes[key]
-    
+
     def __len__(self):
         return len(self.visible_ids)
-    
+
     # endregion
 
 
@@ -129,7 +133,7 @@ class DpmGraph:
     Класс, отвечающий за обработку графовых данных, при этом умеющий также
     подгружать информацию из БД.
     """
-   
+
     def __init__(self, storage, pov_node, nx_graph=None):
         self._storage = storage
         self.pov_id = pov_node.id
@@ -146,24 +150,24 @@ class DpmGraph:
         self.levels_down = 0
         self.reached_bottom_limit = False
         self.reached_upper_limit = False
-    
+
     # region properties
     @property
     def nodes(self):
         return self.nx_graph.nodes()
-    
+
     @property
     def number_of_subordinate_nodes(self):
         """
         Возвращает количество вершин за вычетом POV.
         """
         return len(self.nx_graph.nodes())-1
-    
+
     @property
     def auto_hidden_nodes(self):
         return [
-            node 
-            for node in self.nx_graph.node 
+            node
+            for node in self.nx_graph.node
             if self.nx_graph.node[node]["status"] == NodeStatus.AUTO_HIDDEN
         ]
     # endregion
@@ -171,15 +175,18 @@ class DpmGraph:
     # region public methods
     def load_dependencies(self, levels_up=0, levels_down=0):
         """
-        Приводит граф к состоянию, когда у POV-вершины глубина восходящих связей 
-        не более чем levels_up и глубина нисходящих связей не более чем levels_down.
+        Приводит граф к состоянию, когда у POV-вершины глубина восходящих
+        связей не более чем levels_up и глубина нисходящих связей не
+        более чем levels_down.
 
-        В качестве обоих параметров может быть передано float("inf"), в этом случае
-        связи следует загружать до конца, то есть пока не закончатся объекты, имеющие связи.
+        В качестве обоих параметров может быть передано float("inf"),
+        в этом случае связи следует загружать до конца, то есть пока не
+        закончатся объекты, имеющие связи.
 
-        Если глубина связей в любом направлении превосходит текущее значение, то новые связи должны быть
-        загружены из БД;
-        если наоборот, текущая глубина связей больше требуемой, то все лишние вершины и рёбра будут удалены.
+        Если глубина связей в любом направлении превосходит текущее
+        значение, то новые связи должны быть загружены из БД;
+        если наоборот, текущая глубина связей больше требуемой,
+        то все лишние вершины и рёбра будут удалены.
         """
         if (levels_up == self.levels_up) and (levels_down == self.levels_down):
             return
@@ -197,11 +204,11 @@ class DpmGraph:
             self.reached_bottom_limit = False
         self._recalc()
         self._rollup_inner_contour()
-    
+
     def hide_node(self, node_id):
         self.nx_graph.node[node_id]["status"] = NodeStatus.ROLLED_UP
         self._prepare_graph_for_drawing()
-    
+
     def show_node(self, node_id):
         self.nx_graph.node[node_id]["status"] = NodeStatus.VISIBLE
         self._prepare_graph_for_drawing()
@@ -222,15 +229,15 @@ class DpmGraph:
             )
         for operation in config["edges"]:
             nx.draw_networkx_edges(
-                self.proxy_graph, 
-                pos, 
-                [e for e in self.proxy_graph.edges if self.proxy_graph.adj[e[0]][e[1]][0].get(operation)==True], 
+                self.proxy_graph,
+                pos,
+                [e for e in self.proxy_graph.edges if self.proxy_graph.adj[e[0]][e[1]][0].get(operation) == True],
                 **config["edges"][operation]
             )
         nx.draw_networkx_labels(
             self.proxy_graph, 
             pos, 
-            {n:self.proxy_graph.node[n]["label"] for n in self.proxy_graph.node}, 
+            {n:self.proxy_graph.node[n]["label"] for n in self.proxy_graph.node},
             font_size=6
         )
 
@@ -239,7 +246,7 @@ class DpmGraph:
 
     def predecessors_of(self, node):
         return self.nx_graph.predecessors(node)
-    
+
     def search_node(self, criterion):
         result_list = []
         for node_id in self.nx_graph.node:
@@ -258,12 +265,47 @@ class DpmGraph:
                 result_list.append(node_id)
         return result_list
 
+    def reveal_hidden_nodes(self, node_list):
+        """
+        Показывает скрытые ноды из списка так, чтобы стали видны пути,
+        соединяющие каждую ноду с точкой отсчёта. Ищет путь в обе стороны,
+        ничего не предпринимает, если путь в одну из сторон не найден.
+        """
+        nodes_in_path = set()
+        for node_id in node_list:
+            # получаем для каждой вершины путь из неё к точке отсчёта
+            try:
+                nodes_in_path.update(
+                    nx.algorithms.shortest_paths.generic.shortest_path(
+                        self.nx_graph,
+                        source=node_id,
+                        target=self.pov_id
+                    )
+                )
+            except nx.exception.NetworkXNoPath:
+                pass
+            # и наоборот - из точки отсчёта к вершине
+            try:
+                nodes_in_path.update(
+                    nx.algorithms.shortest_paths.generic.shortest_path(
+                        self.nx_graph,
+                        source=self.pov_id,
+                        target=node_id
+                    )
+                )
+            except nx.exception.NetworkXNoPath:
+                pass
+        for node_id in nodes_in_path:
+            self.nx_graph.node[node_id]["status"] = NodeStatus.VISIBLE
+        self._prepare_graph_for_drawing()
+
     # endregion
 
     # region utility methods
     def _cut_upper_levels(self, limit):
         """
-        Удаляет вершины, длина кратчайшего пути от которых к POV превышает limit.
+        Удаляет вершины, длина кратчайшего пути от которых к POV
+        превышает limit.
         """
         length = dict(nx.single_target_shortest_path_length(self.nx_graph, self.pov_id))
         for node_id in length:
@@ -272,7 +314,8 @@ class DpmGraph:
 
     def _cut_lower_levels(self, limit):
         """
-        Удаляет вершины, длина кратчайшего пути от POV к которым превышает limit.
+        Удаляет вершины, длина кратчайшего пути от POV к которым
+        превышает limit.
         """
         length = nx.single_source_shortest_path_length(self.nx_graph, self.pov_id)
         for node_id in length:
@@ -313,10 +356,12 @@ class DpmGraph:
 
     def _explore_lower_nodes(self, node, levels_counter):
         """
-        Закапывается на levels_counter уровней вглубь зависимостей указанной вершины.
-        Возвращает True, если закопаться на нужное количество уровней не удалось и поиск
-        окончился раньше времени.
-        Это значение служит индикатором того, что граф исследован вглубь до конца.
+        Закапывается на levels_counter уровней вглубь зависимостей
+        указанной вершины.
+        Возвращает True, если закопаться на нужное количество уровней
+        не удалось и поиск окончился раньше времени.
+        Это значение служит индикатором того, что граф исследован
+        вглубь до конца.
         """
         children = node.get_children()
         if len(children) == 0:
@@ -334,19 +379,23 @@ class DpmGraph:
                 if levels_counter > 1:
                     digging_failed.append(self._explore_lower_nodes(child, levels_counter-1))
             else:
-                # если вершина уже в графе, то проверяем является ли она периферийной
+                # если вершина уже в графе, то проверяем является ли
+                # она периферийной
                 digging_failed.append(self._check_node_is_peripheral(child.id))
-            # присоединяем дочернюю вершину к родительской, создавая ребро графа для каждой операции
+            # присоединяем дочернюю вершину к родительской, создавая ребро
+            # графа для каждой операции
             for attr in edge_attrs:
                 self._add_edge(node, child, attr)
         return all(digging_failed)
 
     def _explore_upper_nodes(self, node, levels_counter):
         """
-        Закапывается на levels_counter уровней вверх по зависимостям указанной вершины.
-        Возвращает True, если подняться на нужное количество уровней не удалось и поиск
-        окончился раньше времени. 
-        Это значение служит индикатором того, что граф исследован вверх до конца.
+        Закапывается на levels_counter уровней вверх по зависимостям
+        указанной вершины.
+        Возвращает True, если подняться на нужное количество уровней не
+        удалось и поиск окончился раньше времени.
+        Это значение служит индикатором того, что граф исследован
+        вверх до конца.
         """
         parents = node.get_parents()
         if len(parents) == 0:
@@ -370,10 +419,10 @@ class DpmGraph:
             for attr in edge_attrs:
                 self._add_edge(parent, node, attr)
         return all(rising_failed)
-    
+
     def _set_node_as_peripheral(self, node_id):
         self.nx_graph.node[node_id]["peripheral"] = True
-    
+
     def _check_node_is_peripheral(self, node_id):
         return self.nx_graph.node[node_id]["peripheral"]
 
@@ -390,8 +439,7 @@ class DpmGraph:
             status=NodeStatus.NEW,
             peripheral=False
         )
-        
-    
+
     def _add_edge(self, source, dest, attr):
         self.nx_graph.add_edge(source.id, dest.id, **{attr: True})
 
@@ -404,17 +452,18 @@ class DpmGraph:
 
         self.levels_down = max([length for length in path_down.values()])
         self.levels_up = max([length for length in path_up.values()])
-    
+
     def _rollup_inner_contour(self):
         """
-        Помечает все вновь загруженные вершины, непосредственно примыкающие к точке отсчёта, 
-        как свёрнутые и убирает их из подставного графа (они перестают отображаться при визуализации).
+        Помечает все вновь загруженные вершины, непосредственно
+        примыкающие к точке отсчёта, как свёрнутые и убирает их из
+        подставного графа (они перестают отображаться при визуализации).
         """
         for node in itertools.chain(self.nx_graph.predecessors(self.pov_id), self.nx_graph.successors(self.pov_id)):
             if self.nx_graph.node[node]["status"] == NodeStatus.NEW:
                 self.nx_graph.node[node]["status"] = NodeStatus.ROLLED_UP
         self._prepare_graph_for_drawing()
-    
+
     def _prepare_graph_for_drawing(self):
         """
         Вычищает из подставного графа все скрытые вершины и все вершины,
@@ -424,12 +473,14 @@ class DpmGraph:
         rolled_up_nodes = [node for node in self.proxy_graph.node if self.proxy_graph.node[node]["status"] == NodeStatus.ROLLED_UP]
         for node in rolled_up_nodes:
             self.proxy_graph.remove_node(node)
-        # находим компоненты связности и удаляем их все, кроме той в которой находится точка отсчёта
+        # находим компоненты связности и удаляем их все, кроме той в которой
+        # находится точка отсчёта
         for comp in list(nx.weakly_connected_components(self.proxy_graph)):
             if not self.pov_id in comp:
                 for node in comp:
                     self.proxy_graph.remove_node(node)
-        # Сопоставляем основной и замещающий граф, помечает несвёрнутые ноды первого, отсутствующие
+        # Сопоставляем основной и замещающий граф, помечает несвёрнутые ноды
+        # первого, отсутствующие
         # во втором как скрытые.
         for node in self.nx_graph.node:
             if not node in self.proxy_graph.node and self.nx_graph.node[node]["status"] != NodeStatus.ROLLED_UP:
@@ -438,7 +489,7 @@ class DpmGraph:
                 self.nx_graph.node[node]["status"] = NodeStatus.VISIBLE
 
     # endregion
-    
+
     # region dunder methods
     def __getitem__(self, key):
         return self.nx_graph.node[key]
