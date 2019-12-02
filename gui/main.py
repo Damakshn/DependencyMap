@@ -1,7 +1,7 @@
 from PySide2 import QtWidgets, QtGui
 import sys
-from .browseObject import BrowseObjectWidget
-from .browseGraph import BrowseGraphWidget
+from .browse_object import BrowseObjectWidget
+from .browse_graph import BrowseGraphWidget
 import settings
 import os
 from .collection import IconCollection

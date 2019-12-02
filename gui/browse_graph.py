@@ -8,7 +8,7 @@ import settings
 from dpm.graphsworks import DpmGraph, NodeStatus
 from .collection import IconCollection
 from .enums import NodeListColumns
-from .historyPoint import HistoryPoint
+from .history_point import HistoryPoint
 
 
 class BrowseGraphWidget(BrowseWidget):
