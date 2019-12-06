@@ -197,7 +197,8 @@ class HistoryPoint:
         id = QtGui.QStandardItem(str(self.graph[node_id]["id"]))
         name = QtGui.QStandardItem(self.graph[node_id]["label"])
         status = QtGui.QStandardItem(str(int(self.graph[node_id]["status"])))
-        return [icon, id, name, status]
+        blind = QtGui.QStandardItem("1" if self.graph[node_id]["is_blind"] else "0")
+        return [icon, id, name, status, blind]
 
     def _update_node_statuses_in_models(self):
         """

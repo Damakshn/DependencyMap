@@ -49,8 +49,7 @@ class GraphSearchResult:
     @property
     def total(self):
         return len(self.id_list_full)
-    
-    
+
     @property
     def hidden_ids(self):
         return [id for id in self.id_list_full if self.graph[id]["status"] in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN)]
@@ -121,10 +120,11 @@ class GraphSearchResult:
 
 
 class NodeStatus(IntEnum):
-    NEW = 0
-    VISIBLE = 1
-    ROLLED_UP = 2
-    AUTO_HIDDEN = 3
+    VISIBLE = 0
+    ROLLED_UP = 1
+    AUTO_HIDDEN = 2
+    REVEALED = 3
+    ROLLED_UP_REVEALED = 4
 
 
 def changes_visiblity(method):
@@ -467,8 +467,9 @@ class DpmGraph:
             label=model.label,
             node_class=model.__class__.__name__,
             id=model.id,
-            status=NodeStatus.NEW,
-            peripheral=False
+            status=NodeStatus.VISIBLE,
+            peripheral=False,
+            is_blind=False
         )
 
     def _add_edge(self, source, dest, attr):
@@ -483,6 +484,9 @@ class DpmGraph:
 
         self.levels_down = max([length for length in path_down.values()])
         self.levels_up = max([length for length in path_up.values()])
+        # вершины без потомков
+        for node in self.nx_graph.node:
+            self.nx_graph.node[node]["is_blind"] = (not list(self.nx_graph.successors(node)))
 
     @changes_visiblity
     def _rollup_inner_contour(self):
@@ -492,7 +496,7 @@ class DpmGraph:
         подставного графа (они перестают отображаться при визуализации).
         """
         for node in itertools.chain(self.nx_graph.predecessors(self.pov_id), self.nx_graph.successors(self.pov_id)):
-            if self.nx_graph.node[node]["status"] == NodeStatus.NEW:
+            if self.nx_graph.node[node]["status"] == NodeStatus.VISIBLE:
                 self.nx_graph.node[node]["status"] = NodeStatus.ROLLED_UP
 
     # endregion

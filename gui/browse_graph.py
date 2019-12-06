@@ -2,7 +2,6 @@ import os
 from PySide2 import QtWidgets, QtGui, QtCore
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
-from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
 from .browse_widget import BrowseWidget
 import settings
 from dpm.graphsworks import DpmGraph, NodeStatus
@@ -18,8 +17,6 @@ class BrowseGraphWidget(BrowseWidget):
     # region ToDO
     # большие фичи интерфейса:
     #   ToDo поиск
-    #       ToDo обработка скрытых нод при поиске: выводить в описании результата, что есть скрытые ноды, кнопка "Показать", показ скрытых результатов
-    #       ToDo фокус на объекте в таблице\дереве при поиске
     #       ToDo правильный перебор результатов, если они были показаны через контекстное меню в списке, проблема с нулевым индексом
     #       ToDo перенос позиции в результате в класс SearchResult? (чтобы правильно показывать номер позиции в надписи на панели поиска)
     #   ToDo невозможность вызвать контекстное меню на точке отсчета в списке
@@ -122,6 +119,15 @@ class BrowseGraphWidget(BrowseWidget):
 
         self.node_action_show = QtWidgets.QAction(IconCollection.icons["visible"], "Показать")
         self.node_action_show.triggered.connect(self._show_node)
+
+        self.node_action_rollup = QtWidgets.QAction(IconCollection.icons["invisible"], "Свернуть")
+        self.node_action_rollup.triggered.connect(self._hide_node)
+
+        self.node_action_expand = QtWidgets.QAction(IconCollection.icons["visible"], "Развернуть")
+        self.node_action_expand.triggered.connect(self._show_node)
+
+        self.node_action_show_all = QtWidgets.QAction(IconCollection.icons["visible"], "Показать всё")
+        self.node_action_show_all.triggered.connect(self._show_node)
 
     def _init_dependencies_panel(self):
         # панель управления подгрузкой зависимостей
@@ -233,16 +239,33 @@ class BrowseGraphWidget(BrowseWidget):
 
     def _show_node_context_menu(self, position):
         self.node_context_menu.clear()
-        self.node_context_menu.addAction(self.node_action_set_pov)
-        # если нода видимая, то добавляем в меню пункт "Скрыть"
-        # иначе добавляем пункт "Показать"
         chosen_index = self._active_view.selectionModel().selectedRows()[0]
         model = self._active_view.model()
         status = int(model.data(model.index(chosen_index.row(), NodeListColumns.STATUS_COLUMN, chosen_index.parent())))
-        if status == NodeStatus.ROLLED_UP:
-            self.node_context_menu.addAction(self.node_action_show)
-        else:
+        node_id = int(model.data(model.index(chosen_index.row(), NodeListColumns.ID_COLUMN, chosen_index.parent())))
+        is_blind = bool(int(model.data(model.index(chosen_index.row(), NodeListColumns.BLIND_COLUMN, chosen_index.parent()))))
+        # для точки отсчёта контекстное меню не выводится
+        if node_id == self.state.pov_id:
+            return
+        self.node_context_menu.addAction(self.node_action_set_pov)
+        # в зависимости от статуса ноды и наличия загруженных потомков
+        # определяем пункты контекстного меню, которые будут
+        # показаны пользователю
+        if status == NodeStatus.VISIBLE:
+            if is_blind:
+                self.node_context_menu.addAction(self.node_action_hide)
+            else:
+                self.node_context_menu.addAction(self.node_action_rollup)
+        elif status == NodeStatus.REVEALED:
             self.node_context_menu.addAction(self.node_action_hide)
+            if not is_blind:
+                self.node_context_menu.addAction(self.node_action_expand)
+        elif status == NodeStatus.ROLLED_UP:
+            self.node_context_menu.addAction(self.node_action_expand)
+        elif status == NodeStatus.ROLLED_UP_REVEALED:
+            self.node_context_menu.addAction(self.node_action_rollup)
+            self.node_context_menu.addAction(self.node_action_show_all)
+        # выводим меню
         self.node_context_menu.exec_(self.table_view.viewport().mapToGlobal(position))
 
     def _process_row_selection(self):
