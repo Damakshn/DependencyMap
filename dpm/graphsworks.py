@@ -34,92 +34,47 @@ import re
 # ToDo настройки визуализации в config.json
 
 
-class GraphSearchResult:
-
-    def __init__(self, search_word, graph, nodes=None):
-        if nodes is not None:
-            self.id_list_full = nodes
-        else:
-            self.id_list_full = []
-        self.search_word = search_word
-        self.graph = graph
-        self.current_pos = 0
-
-    # region Proprties
-    @property
-    def total(self):
-        return len(self.id_list_full)
-
-    @property
-    def hidden_ids(self):
-        return [id for id in self.id_list_full if self.graph[id]["status"] in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN)]
-
-    @property
-    def has_hidden(self):
-        return (len(self.hidden_ids) > 0)
-
-    @property
-    def visible_ids(self):
-        return [id for id in self.id_list_full if self.graph[id]["status"] not in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN)]
-
-    @property
-    def visible_nodes(self):
-        return [self.graph[id] for id in self.visible_ids]
-
-    @property
-    def hidden_nodes(self):
-        return [self.graph[id] for id in self.hidden_ids]
-    # endregion
-
-    # region public methods
-    def add_node(self, node_id):
-        self.id_list_full.append(node_id)
-
-    def to_first(self):
-        self.current_pos = 0
-
-    def to_next(self):
-        if len(self) == 0:
-            return
-        self.current_pos = (self.current_pos + 1) % len(self)
-
-    def to_previous(self):
-        if len(self) == 0:
-            return
-        self.current_pos = (self.current_pos - 1 + len(self)) % len(self)
-
-    def get_current_match(self):
-        if len(self) == 0:
-            return None
-        return self[self.current_pos]
-
-    # endregion
-
-    # region dunder methods
-    def __str__(self):
-        if len(self) == 0:
-            if self.has_hidden:
-                return f"Найдено {len(self.hidden_ids)} скрытых совпадений"
-            else:
-                return "Совпадений не найдено"
-        elif self.has_hidden:
-            return f"{self.current_pos + 1}-е из {len(self)} совпадений ({len(self.hidden_ids)} скрыто)"
-        else:
-            return f"{self.current_pos + 1}-е из {len(self)} совпадений"
-
-    def __iter__(self):
-        return iter(self.visible_nodes)
-
-    def __getitem__(self, key):
-        return self.visible_nodes[key]
-
-    def __len__(self):
-        return len(self.visible_ids)
-
-    # endregion
-
-
 class NodeStatus(IntEnum):
+    """
+    Перечисление, содержащее возможные статусы вершин графа.
+    Статусы влияют на видимость вершин в виджетах GUI и видимость при
+    визуализации графа. В сочетании с другими свойствами, статусы
+    также определяют набор действий, которые можно выполнять с
+    вершинами через контекстное меню.
+
+    VISIBLE
+        вершина видна в списке и на графике, видны все её нескрытые потомки;
+        допустимые действия:
+            скрыть/свернуть в зависимости от наличия потомков.
+        Этот статус имеют по умолчанию все вершины при загрузке из БД.
+    ROLLED_UP
+        вершина скрыта пользователем, видна в списке, но не видна на графике;
+        потомки вершины не видны;
+        доступные действия:
+            Развернуть
+    AUTO_HIDDEN
+        вершина скрыта потому, что скрыт её предок;
+        она не видна нигде; нет доступных действий;
+    REVEALED
+        Вершина была скрыта прямо или через предка, но она была
+        показана через функцию "Показать скрытые результаты поиска"
+        вершина видна в списке и на графике, потомки вершины не видны нигде;
+        доступные действия:
+            скрыть;
+            развернуть (при наличии загруженных потомков)
+    ROLLED_UP_REVEALED
+        Вершина была скрыта, но при показе скрытых результатов поиска
+        её пришлось отобразить, чтобы стал видет путь между показанным
+        результатом и точкой отсчёта;
+        вершина видна везде, из её потомков отображаются только те, которые
+        имеют статусы REVEALED и ROLLED_UP_REVEALED;
+        доступные действия:
+            Свернуть;
+            Показать всех потомков;
+        Важно - вершина, которая сама является скрытым результатом поиска,
+        может получить такой статус, если лежит на пути между точкой отсчёта и
+        другим результатом.
+    """
     VISIBLE = 0
     ROLLED_UP = 1
     AUTO_HIDDEN = 2
@@ -138,9 +93,15 @@ def changes_visiblity(method):
         method(*args, **kwargs)
         graph = args[0]
         graph.proxy_graph = graph.nx_graph.copy()
-        rolled_up_nodes = [node for node in graph.proxy_graph.node if graph.proxy_graph.node[node]["status"] == NodeStatus.ROLLED_UP]
-        for node in rolled_up_nodes:
-            graph.proxy_graph.remove_node(node)
+        # удаляем из прокси-графа все явно или косвенно скрытые вершины
+        for node_id in graph:
+            if graph[node_id]["status"] == NodeStatus.ROLLED_UP_REVEALED:
+                for neighbour in graph.neighbours_of(node_id):
+                    if (not graph.is_revealed_node(neighbour)) and (neighbour != graph.pov_id):
+                        graph.proxy_graph.remove_node(neighbour)
+            if graph[node_id]["status"] == NodeStatus.ROLLED_UP:
+                graph.proxy_graph.remove_node(node_id)
+
         # находим компоненты связности и удаляем их все, кроме той в которой
         # находится точка отсчёта
         for comp in list(nx.weakly_connected_components(graph.proxy_graph)):
@@ -172,7 +133,7 @@ class DpmGraph:
             # nx_graph - основной граф, отражающий реальную структуру зависимостей
             self.nx_graph = nx.MultiDiGraph()
             self._add_nx_node_from_model(pov_node)
-            # proxy_graph - заместитель для отображения
+            # proxy_graph - заместитель, используемый для визуализации
             self.proxy_graph = self.nx_graph.copy()
         else:
             self.nx_graph = nx_graph
@@ -272,13 +233,28 @@ class DpmGraph:
             font_size=6
         )
 
-    def successors_of(self, node):
-        return self.nx_graph.successors(node)
+    def successors_of(self, node_id):
+        return self.nx_graph.successors(node_id)
 
-    def predecessors_of(self, node):
-        return self.nx_graph.predecessors(node)
+    def predecessors_of(self, node_id):
+        return self.nx_graph.predecessors(node_id)
+
+    def neighbours_of(self, node_id):
+        return list(
+            itertools.chain(
+                self.nx_graph.successors(node_id),
+                self.nx_graph.predecessors(node_id))
+        )
 
     def search_node(self, criterion):
+        """
+        Выполняет поиск среди вершин графа по заданным критериям.
+        Критерии поиска передаются в виде словаря, ключи - атрибуты, которые
+        нужно проверить, значения - то, что должно быть в этих атрибутах.
+
+        Если нужно осуществлять поиск по названию вершины (атрибут label),
+        то используется регулярное выражение.
+        """
         result_list = []
         for node_id in self.nx_graph.node:
             match = []
@@ -296,13 +272,30 @@ class DpmGraph:
                 result_list.append(node_id)
         return result_list
 
+    def is_visible_node(self, node_id):
+        """
+        Возвращает True, если нода видима и в графе, и в списке.
+        """
+        return self.nx_graph.node[node_id]["status"] not in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN)
+
+    def is_revealed_node(self, node_id):
+        """
+        Возвращает True, если вершина была скрыта, но показана как результат поиска.
+        """
+        return self.nx_graph.node[node_id]["status"] in (NodeStatus.ROLLED_UP_REVEALED, NodeStatus.REVEALED)
+
     @changes_visiblity
     def reveal_hidden_nodes(self, node_list):
         """
         Показывает скрытые ноды из списка так, чтобы стали видны пути,
         соединяющие каждую ноду с точкой отсчёта. Ищет путь в обе стороны,
         ничего не предпринимает, если путь в одну из сторон не найден.
+        В результате этой операции статусы вершин обновляются хитрым
+        образом, см. комментарии ниже.
         """
+
+        # содержит все ноды, лежащие на пути между точкой отсчёта
+        # и теми нодами, что нужно показать
         nodes_in_path = set()
         for node_id in node_list:
             # получаем для каждой вершины путь из неё к точке отсчёта
@@ -327,8 +320,23 @@ class DpmGraph:
                 )
             except nx.exception.NetworkXNoPath:
                 pass
+            # удаляем искомую вершину из множества, обработаем её отдельно
+            nodes_in_path.remove(node_id)
+        # после перебора всех вершин исключаем из множества точку отсчёта,
+        # потому что её статус не может изменяться
+        nodes_in_path.remove(self.pov_id)
+        # перебираем вершины из всех путей, если они скрыты, ставим им статус ROLLED_UP_REVEALED
+        # о назначении статусов см. комменты к NodeStatus;
         for node_id in nodes_in_path:
-            self.nx_graph.node[node_id]["status"] = NodeStatus.VISIBLE
+            if not self.is_visible_node(node_id):
+                self.nx_graph.node[node_id]["status"] = NodeStatus.ROLLED_UP_REVEALED
+        # перебираем вершины, которые изначально нужно было показать
+        for node_id in node_list:
+            # если у вершины стоит статус ROLLED_UP_REVEALED, то она будет
+            # визуализирована и её можно не трогать;
+            # все остальные вершины - те, которые находятся на концах путей
+            if self.nx_graph.node[node_id]["status"] != NodeStatus.ROLLED_UP_REVEALED:
+                self.nx_graph.node[node_id]["status"] = NodeStatus.REVEALED
 
     # endregion
 
@@ -438,7 +446,7 @@ class DpmGraph:
             # если новая вершина ещё не добавлена в граф, то добавляем её id в граф и прописываем все атрибуты
             if parent.id not in self.nx_graph:
                 self._add_nx_node_from_model(parent)
-                # исследуем дочернюю вершину, если нужно 
+                # исследуем дочернюю вершину, если нужно
                 # подняться ещё на несколько уровней
                 # и сохраняем результат
                 if levels_counter > 1:
@@ -494,9 +502,12 @@ class DpmGraph:
         Помечает все вновь загруженные вершины, непосредственно
         примыкающие к точке отсчёта, как свёрнутые и убирает их из
         подставного графа (они перестают отображаться при визуализации).
+
+        Это нужно для того, чтобы при граф при визуализации имел
+        более аккуратный вид.
         """
         for node in itertools.chain(self.nx_graph.predecessors(self.pov_id), self.nx_graph.successors(self.pov_id)):
-            if self.nx_graph.node[node]["status"] == NodeStatus.VISIBLE:
+            if self.is_visible_node(node):
                 self.nx_graph.node[node]["status"] = NodeStatus.ROLLED_UP
 
     # endregion
@@ -504,4 +515,7 @@ class DpmGraph:
     # region dunder methods
     def __getitem__(self, key):
         return self.nx_graph.node[key]
+
+    def __iter__(self):
+        return iter(self.nx_graph.node)
     # endregion
