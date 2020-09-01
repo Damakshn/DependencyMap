@@ -1,7 +1,8 @@
 from dpm.graphsworks import DpmGraph, NodeStatus
 from PySide2 import QtWidgets, QtGui, QtCore
 from .collection import IconCollection
-from .enums import NodeListColumns, TreeDirection
+from .enums import NodeListColumns
+from helpers import TreeDirection
 from .search_result import QtSearchResult
 
 
@@ -197,8 +198,9 @@ class HistoryPoint:
         id = QtGui.QStandardItem(str(self.graph[node_id]["id"]))
         name = QtGui.QStandardItem(self.graph[node_id]["label"])
         status = QtGui.QStandardItem(str(int(self.graph[node_id]["status"])))
+        revaled = QtGui.QStandardItem("1" if self.graph[node_id]["is_revealed"] else "0")
         blind = QtGui.QStandardItem("1" if self.graph[node_id]["is_blind"] else "0")
-        return [icon, id, name, status, blind]
+        return [icon, id, name, status, revaled, blind]
 
     def _update_node_statuses_in_models(self):
         """

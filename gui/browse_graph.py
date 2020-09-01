@@ -126,9 +126,6 @@ class BrowseGraphWidget(BrowseWidget):
         self.node_action_expand = QtWidgets.QAction(IconCollection.icons["visible"], "Развернуть")
         self.node_action_expand.triggered.connect(self._show_node)
 
-        self.node_action_show_all = QtWidgets.QAction(IconCollection.icons["visible"], "Показать всё")
-        self.node_action_show_all.triggered.connect(self._show_node)
-
     def _init_dependencies_panel(self):
         # панель управления подгрузкой зависимостей
         grid = QtWidgets.QGridLayout()
@@ -256,15 +253,8 @@ class BrowseGraphWidget(BrowseWidget):
                 self.node_context_menu.addAction(self.node_action_hide)
             else:
                 self.node_context_menu.addAction(self.node_action_rollup)
-        elif status == NodeStatus.REVEALED:
-            self.node_context_menu.addAction(self.node_action_hide)
-            if not is_blind:
-                self.node_context_menu.addAction(self.node_action_expand)
         elif status == NodeStatus.ROLLED_UP:
             self.node_context_menu.addAction(self.node_action_expand)
-        elif status == NodeStatus.ROLLED_UP_REVEALED:
-            self.node_context_menu.addAction(self.node_action_rollup)
-            self.node_context_menu.addAction(self.node_action_show_all)
         # выводим меню
         self.node_context_menu.exec_(self.table_view.viewport().mapToGlobal(position))
 
@@ -322,7 +312,7 @@ class BrowseGraphWidget(BrowseWidget):
             else:
                 for child_row in range(tree_model.rowCount(parent)):
                     self.tree_view.setRowHidden(child_row, parent, False)
-                # если нода является видимой в списке, то обрабатываем 
+                # если нода является видимой в списке, то обрабатываем
                 # её потомков
                 for child_row in range(tree_model.rowCount(parent=parent)):
                     stack.append(tree_model.index(child_row, 0, parent))

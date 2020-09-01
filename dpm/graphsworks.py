@@ -1,9 +1,9 @@
+from enum import IntEnum
 import itertools
-import networkx as nx
-from .models import Node
-import settings
-from enum import IntEnum, auto
 import re
+import networkx as nx
+from networkx.algorithms.cycles import simple_cycles
+import settings
 
 
 """
@@ -55,31 +55,10 @@ class NodeStatus(IntEnum):
     AUTO_HIDDEN
         вершина скрыта потому, что скрыт её предок;
         она не видна нигде; нет доступных действий;
-    REVEALED
-        Вершина была скрыта прямо или через предка, но она была
-        показана через функцию "Показать скрытые результаты поиска"
-        вершина видна в списке и на графике, потомки вершины не видны нигде;
-        доступные действия:
-            скрыть;
-            развернуть (при наличии загруженных потомков)
-    ROLLED_UP_REVEALED
-        Вершина была скрыта, но при показе скрытых результатов поиска
-        её пришлось отобразить, чтобы стал видет путь между показанным
-        результатом и точкой отсчёта;
-        вершина видна везде, из её потомков отображаются только те, которые
-        имеют статусы REVEALED и ROLLED_UP_REVEALED;
-        доступные действия:
-            Свернуть;
-            Показать всех потомков;
-        Важно - вершина, которая сама является скрытым результатом поиска,
-        может получить такой статус, если лежит на пути между точкой отсчёта и
-        другим результатом.
     """
     VISIBLE = 0
     ROLLED_UP = 1
     AUTO_HIDDEN = 2
-    REVEALED = 3
-    ROLLED_UP_REVEALED = 4
 
 
 def changes_visiblity(method):
@@ -93,37 +72,60 @@ def changes_visiblity(method):
         method(*args, **kwargs)
         graph = args[0]
         graph.proxy_graph = graph.nx_graph.copy()
-        # удаляем из прокси-графа все явно или косвенно скрытые вершины
-        for node_id in graph:
-            if graph[node_id]["status"] == NodeStatus.ROLLED_UP_REVEALED:
-                for neighbour in graph.neighbours_of(node_id):
-                    if (not graph.is_revealed_node(neighbour)) and (neighbour != graph.pov_id):
-                        graph.proxy_graph.remove_node(neighbour)
-            if graph[node_id]["status"] == NodeStatus.ROLLED_UP:
-                graph.proxy_graph.remove_node(node_id)
+        free_nodes = set(graph)
 
-        # находим компоненты связности и удаляем их все, кроме той в которой
-        # находится точка отсчёта
+        def remove_invisible_neighbours(node_id):
+            if node_id not in free_nodes:
+                return
+            free_nodes.remove(node_id)
+            neighbours = [node for node in graph.neighbours_of(node_id) if node in free_nodes]
+            visible = [node for node in neighbours if graph.is_visible_node(node)]
+            # если рассматриваемая вершина свёрнута, сужаем критерий отбора видимых соседей
+            if graph[node_id]["status"] == NodeStatus.ROLLED_UP:
+                visible = [
+                    node
+                    for node in visible
+                    if graph[node]["is_revealed"] or graph[node]["in_cycle"]
+                ]
+            invisible = [node for node in neighbours if node not in visible]
+            for neighbour in invisible:
+                free_nodes.remove(neighbour)
+                graph.proxy_graph.remove_node(neighbour)
+            for neighbour in visible:
+                remove_invisible_neighbours(neighbour)
+
+        remove_invisible_neighbours(graph.pov_id)
+
+        """
+        находим компоненты связности и удаляем их все, кроме той в которой
+        находится точка отсчёта
+        """
         for comp in list(nx.weakly_connected_components(graph.proxy_graph)):
             if graph.pov_id not in comp:
                 for node in comp:
                     graph.proxy_graph.remove_node(node)
-        # Сопоставляем основной и замещающий граф, помечает несвёрнутые ноды
-        # первого, отсутствующие во втором как скрытые.
+        """
+        Сопоставляем основной и замещающий граф, помечает несвёрнутые ноды
+        первого, отсутствующие во втором как скрытые.
+        """
         for node in graph.nx_graph.node:
             if (node not in graph.proxy_graph.node and graph.nx_graph.node[node]["status"] != NodeStatus.ROLLED_UP):
                 graph.nx_graph.node[node]["status"] = NodeStatus.AUTO_HIDDEN
-            elif node in graph.proxy_graph.node:
+            elif (node in graph.proxy_graph.node and graph.nx_graph.node[node]["status"] != NodeStatus.ROLLED_UP):
                 graph.nx_graph.node[node]["status"] = NodeStatus.VISIBLE
-
     return wrapper
 
 
 class DpmGraph:
-
     """
     Класс, отвечающий за обработку графовых данных, при этом умеющий также
     подгружать информацию из БД.
+
+    Визуализация графов в networkx устроена так, что нельзя сказать методу отрисовки,
+    что какие-то вершины в данный момент невидимы, он всегда рисует граф целиком.
+    Чтобы обойти это ограничение, добавлен замещающий граф (proxy_graph), который
+    выглядит в точности так, как должен отображаться исходный граф с учётом всех
+    невидимых вершин.
     """
 
     def __init__(self, storage, pov_node, nx_graph=None):
@@ -276,13 +278,12 @@ class DpmGraph:
         """
         Возвращает True, если нода видима и в графе, и в списке.
         """
-        return self.nx_graph.node[node_id]["status"] not in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN)
-
-    def is_revealed_node(self, node_id):
-        """
-        Возвращает True, если вершина была скрыта, но показана как результат поиска.
-        """
-        return self.nx_graph.node[node_id]["status"] in (NodeStatus.ROLLED_UP_REVEALED, NodeStatus.REVEALED)
+        in_cycle = self.nx_graph.node[node_id]["in_cycle"]
+        is_revealed = self.nx_graph.node[node_id]["is_revealed"]
+        is_pov = (node_id == self.pov_id)
+        is_visible = (self.nx_graph.node[node_id]["status"] == NodeStatus.VISIBLE)
+        return any([in_cycle, is_revealed, is_pov, is_visible])
+        # return self.nx_graph.node[node_id]["status"] not in (NodeStatus.ROLLED_UP, NodeStatus.AUTO_HIDDEN)
 
     @changes_visiblity
     def reveal_hidden_nodes(self, node_list):
@@ -320,23 +321,13 @@ class DpmGraph:
                 )
             except nx.exception.NetworkXNoPath:
                 pass
-            # удаляем искомую вершину из множества, обработаем её отдельно
-            nodes_in_path.remove(node_id)
         # после перебора всех вершин исключаем из множества точку отсчёта,
         # потому что её статус не может изменяться
         nodes_in_path.remove(self.pov_id)
-        # перебираем вершины из всех путей, если они скрыты, ставим им статус ROLLED_UP_REVEALED
-        # о назначении статусов см. комменты к NodeStatus;
+        # перебираем все вершины в пути, отмечаем их как открытые
         for node_id in nodes_in_path:
-            if not self.is_visible_node(node_id):
-                self.nx_graph.node[node_id]["status"] = NodeStatus.ROLLED_UP_REVEALED
-        # перебираем вершины, которые изначально нужно было показать
-        for node_id in node_list:
-            # если у вершины стоит статус ROLLED_UP_REVEALED, то она будет
-            # визуализирована и её можно не трогать;
-            # все остальные вершины - те, которые находятся на концах путей
-            if self.nx_graph.node[node_id]["status"] != NodeStatus.ROLLED_UP_REVEALED:
-                self.nx_graph.node[node_id]["status"] = NodeStatus.REVEALED
+            # (self.nx_graph.node[node_id]["status"] != NodeStatus.VISIBLE) -> True
+            self.nx_graph.node[node_id]["is_revealed"] = True
 
     # endregion
 
@@ -468,7 +459,8 @@ class DpmGraph:
     def _add_nx_node_from_model(self, model):
         """
         Добавляет в граф новую вершину, беря данные из её orm-модели.
-        Поскольку набор атрибутов вершин может меняться, эта операция вынесена в отдельный метод.
+        Поскольку набор атрибутов вершин может меняться, эта операция вынесена
+        в отдельный метод.
         """
         self.nx_graph.add_node(
             model.id,
@@ -477,7 +469,9 @@ class DpmGraph:
             id=model.id,
             status=NodeStatus.VISIBLE,
             peripheral=False,
-            is_blind=False
+            is_blind=False,
+            is_revealed=False,
+            in_cycle=False
         )
 
     def _add_edge(self, source, dest, attr):
@@ -485,16 +479,22 @@ class DpmGraph:
 
     def _recalc(self):
         """
-        Обходит граф, считая максимальные длины путей в центральную вершину и из неё.
+        Обходит граф, считая максимальные длины путей в центральную вершину и
+        из неё.
         """
         path_down = nx.single_source_shortest_path_length(self.nx_graph, self.pov_id)
         path_up = dict(nx.single_target_shortest_path_length(self.nx_graph, self.pov_id))
 
         self.levels_down = max([length for length in path_down.values()])
         self.levels_up = max([length for length in path_up.values()])
-        # вершины без потомков
+        # поиск вершин без потомков
         for node in self.nx_graph.node:
             self.nx_graph.node[node]["is_blind"] = (not list(self.nx_graph.successors(node)))
+        # поиск циклов, проходящих через точку отсчёта
+        cycles = simple_cycles(self.nx_graph)
+        cycles = list(filter(lambda cycle: self.pov_id in cycle, cycles))
+        for node in set([node for cycle in cycles for node in cycle]):
+            self[node]["in_cycle"] = True
 
     @changes_visiblity
     def _rollup_inner_contour(self):
