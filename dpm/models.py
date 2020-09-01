@@ -1,5 +1,5 @@
 from sqlalchemy.ext.declarative import declarative_base, declared_attr
-from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, Boolean, SmallInteger
+from sqlalchemy import Column, ForeignKey, Integer, String, DateTime, Text, Boolean
 from sqlalchemy.orm import deferred, relationship
 from sqlalchemy.orm.collections import attribute_mapped_collection
 from sqlalchemy.schema import Table
@@ -63,20 +63,20 @@ class Node(BaseDPM):
 
     def get_formatted_update_date(self):
         return self.last_update.strftime("%d.%m.%Y %H:%M")
-    
+
     @property
     def label(self):
         """
         Возвращает подпись, которую будет иметь нода при обработке графа.
         """
         return self.name
-    
+
     def get_children(self):
         return []
-    
+
     def get_parents(self):
         return []
-    
+
     def get_recommended_loading_depth(self):
         """
         Возвращает кортеж из количества уровней зависимостей,
@@ -132,10 +132,11 @@ class Edge(BaseDPM):
         else:
             dest_node_name = self.dest.name
         return f"{sourse_node_name} -> {dest_node_name}"
-    
+
     def get_attributes_list(self):
         template = ["calc", "select", "insert", "update", "delete", "exec", "drop", "truncate"]
-        return [attr for attr in template if getattr(self,attr,False) == True]
+        return [attr for attr in template if getattr(self, attr, False)]
+
 
 """
 добавляем классу Node зависимости от Edge
@@ -272,7 +273,10 @@ class DatabaseObject(Node):
         В этом случае используются только полное имя объекта -
         БД.Схема.Название
         """
-        return self.get_regexp_universal(self.sql_actions, [rf"{self.database.name}\.{self.schema}\.{self.name}".lower()])
+        return self.get_regexp_universal(
+            self.sql_actions,
+            [rf"{self.database.name}\.{self.schema}\.{self.name}".lower()]
+        )
 
 
 class SQLQueryMixin():
@@ -339,16 +343,16 @@ class ClientQuery(Node, SQLQueryMixin):
 
     def __repr__(self):
         return f"{self.name}: {self.component_type} "
-    
+
     def get_children(self):
         children = []
         for e in self.edges_out:
             children.append((e.dest, e.get_attributes_list()))
         return children
-    
+
     def get_parents(self):
         return [(self.form, ["contain"])]
-    
+
     def get_recommended_loading_depth(self):
         """
         Возвращает кортеж из количества уровней зависимостей,
@@ -358,7 +362,9 @@ class ClientQuery(Node, SQLQueryMixin):
         """
         return (0, 1)
 
-AppsAndForms = Table('AppsAndForms', BaseDPM.metadata,
+
+AppsAndForms = Table(
+    'AppsAndForms', BaseDPM.metadata,
     Column('form_id', Integer, ForeignKey('Form.id')),
     Column('application_id', Integer, ForeignKey('Application.id'))
 )
@@ -418,14 +424,14 @@ class Form(Node):
     @property
     def is_shared(self):
         return len(self.applications) > 1
-    
+
     @property
     def label(self):
         """
         Возвращает подпись, которую будет иметь нода при обработке графа.
         """
         return str(self.id)
-    
+
     @property
     def categories(self):
         return [
@@ -446,7 +452,7 @@ class Form(Node):
         for app in self.applications:
             parents.append((app, ["contain"]))
         return parents
-    
+
     def get_recommended_loading_depth(self):
         """
         Возвращает кортеж из количества уровней зависимостей,
@@ -455,6 +461,7 @@ class Form(Node):
         второй - нисходящие.
         """
         return (0, 2)
+
 
 class Application(Node):
     """
@@ -495,22 +502,22 @@ class Application(Node):
 
     def __repr__(self):
         return self.name
-    
+
     @property
     def categories(self):
         return [
             {"name": "Формы", "dataset": list(self.forms.values())}
         ]
-    
+
     def get_children(self):
         children = []
         for form in self.forms.values():
             children.append((form, ["contain"]))
         return children
-    
+
     def get_parents(self):
         return []
-    
+
     def get_recommended_loading_depth(self):
         """
         Возвращает кортеж из количества уровней зависимостей,
@@ -567,7 +574,7 @@ class DBScript(DatabaseObject, SQLQueryMixin):
         при его использовании в sql-коде.
         """
         return []
-    
+
     def get_children(self):
         children = []
         for e in self.edges_out:
@@ -585,7 +592,7 @@ class DBScript(DatabaseObject, SQLQueryMixin):
                 continue
             parents.append((e.sourse, e.get_attributes_list()))
         return parents
-    
+
     def get_recommended_loading_depth(self):
         """
         Возвращает кортеж из количества уровней зависимостей,
@@ -608,7 +615,7 @@ class DBView(DBScript):
 
     def __repr__(self):
         return f"{self.full_name} : Представление"
-    
+
     @property
     def sql_actions(self):
         """
@@ -630,7 +637,7 @@ class DBScalarFunction(DBScript):
 
     def __repr__(self):
         return f"{self.full_name} : Скалярная функция"
-    
+
     @property
     def sql_actions(self):
         """
@@ -652,7 +659,7 @@ class DBTableFunction(DBScript):
 
     def __repr__(self):
         return f"{self.full_name} : Табличная функция"
-    
+
     @property
     def sql_actions(self):
         """
@@ -674,7 +681,7 @@ class DBStoredProcedure(DBScript):
 
     def __repr__(self):
         return f"{self.full_name} : Хранимая процедура"
-    
+
     @property
     def sql_actions(self):
         """
@@ -792,7 +799,7 @@ class DBTable(DatabaseObject):
         for e in self.edges_in:
             parents.append((e.sourse, e.get_attributes_list()))
         return parents
-    
+
     def get_recommended_loading_depth(self):
         """
         Возвращает кортеж из количества уровней зависимостей,
@@ -891,7 +898,7 @@ class Database(Node):
 
     def get_parents(self):
         return []
-    
+
     def get_recommended_loading_depth(self):
         """
         Возвращает кортеж из количества уровней зависимостей,

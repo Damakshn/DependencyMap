@@ -9,7 +9,7 @@ from sync.scan_db import scan_database
 from sync.scan_source import scan_application
 import settings
 from dpm.storage import NodeStorage
-from gui import init_gui
+from dpm.graphsworks import DpmGraph
 
 
 def create_new_session(config):
@@ -71,7 +71,10 @@ def prepare_test_sqlite_db(connector, config):
 def main():
     config = settings.config
     storage = NodeStorage(create_new_session(config))
-    init_gui(storage)
+    observed_app = storage.get_node_by_id(2)
+    g = DpmGraph(storage, observed_app)
+    g.load_dependencies(levels_down=3)
+    g.export_to_gexf()
 
 
 if __name__ == "__main__":

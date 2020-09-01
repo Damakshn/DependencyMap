@@ -32,7 +32,6 @@ def analize_links(session, conn):
                 else:
                     regexp = foreign_regexp
                 edge_template = {}
-                
                 for match in regexp.finditer(script.sql):
                     edge_template[match.lastgroup] = True
                 if len(edge_template) > 0:
@@ -40,11 +39,8 @@ def analize_links(session, conn):
                     for key in edge_template:
                         setattr(edge, key, True)
                     session.add(edge)
-                    logging.info(f"Связь {edge_template} {script.name} -> {obj.name}")
+                    logging.info(f"Связь {edge_template} {script.name} -> {obj_name}")
         except (DBAPIError, ProgrammingError, KeyError) as e:
-            if isinstance(e,KeyError):
+            if isinstance(e, KeyError):
                 print(f"KeyError - {script_name}")
             logging.warning(f"Ошибка: {e}")
-    
-        
- 

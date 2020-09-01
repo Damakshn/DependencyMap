@@ -1,5 +1,6 @@
 from . import models
 
+
 class NodeStorage:
 
     nodes = {}
@@ -12,16 +13,16 @@ class NodeStorage:
     def get_node_by_id(self, node_id):
         if self.session is None:
             return []
-        if not id in self.nodes:
+        if id not in self.nodes:
             new_node = self.session.query(models.Node).filter_by(id=node_id).one()
             self.nodes[id] = new_node
         return self.nodes[id]
-    
+
     def get_group_of_nodes_by_ids(self, ids):
         nodes_to_get = set()
         result = []
         for id in ids:
-            if not id in self.nodes:
+            if id not in self.nodes:
                 nodes_to_get.add(id)
             else:
                 result.append(self.nodes[id])
@@ -31,12 +32,11 @@ class NodeStorage:
         result.extend(new_nodes)
         return result
 
-    
     def get_databases_list(self):
         if self.session is None:
             return []
         return self.session.query(models.Database).all()
-    
+
     def get_applications_list(self):
         if self.session is None:
             return []
