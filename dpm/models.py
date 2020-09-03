@@ -133,9 +133,9 @@ class Edge(BaseDPM):
             dest_node_name = self.dest.name
         return f"{sourse_node_name} -> {dest_node_name}"
 
-    def get_attributes_list(self):
+    def get_attributes_dict(self):
         template = ["calc", "select", "insert", "update", "delete", "exec", "drop", "truncate"]
-        return [attr for attr in template if getattr(self, attr, False)]
+        return {attr: getattr(self, attr, False) for attr in template}
 
 
 """
@@ -347,11 +347,11 @@ class ClientQuery(Node, SQLQueryMixin):
     def get_children(self):
         children = []
         for e in self.edges_out:
-            children.append((e.dest, e.get_attributes_list()))
+            children.append((e.dest, e.get_attributes_dict()))
         return children
 
     def get_parents(self):
-        return [(self.form, ["contain"])]
+        return [(self.form, {"contain": True})]
 
     def get_recommended_loading_depth(self):
         """
@@ -444,13 +444,14 @@ class Form(Node):
     def get_children(self):
         children = []
         for component in self.components.values():
-            children.append((component, ["contain"]))
+            # children.append((component, ["contain"]))
+            children.append((component, {"contain": True}))
         return children
 
     def get_parents(self):
         parents = []
         for app in self.applications:
-            parents.append((app, ["contain"]))
+            parents.append((app, {"contain": True}))
         return parents
 
     def get_recommended_loading_depth(self):
@@ -512,7 +513,8 @@ class Application(Node):
     def get_children(self):
         children = []
         for form in self.forms.values():
-            children.append((form, ["contain"]))
+            # children.append((form, ["contain"]))
+            children.append((form, {"contain": True}))
         return children
 
     def get_parents(self):
@@ -581,7 +583,7 @@ class DBScript(DatabaseObject, SQLQueryMixin):
             # защита от рекурсивных вызовов, где ребро графа циклическое
             if e.sourse.id == e.dest.id:
                 continue
-            children.append((e.dest, e.get_attributes_list()))
+            children.append((e.dest, e.get_attributes_dict()))
         return children
 
     def get_parents(self):
@@ -590,7 +592,7 @@ class DBScript(DatabaseObject, SQLQueryMixin):
             # защита от рекурсивных вызовов, где ребро графа циклическое
             if e.sourse.id == e.dest.id:
                 continue
-            parents.append((e.sourse, e.get_attributes_list()))
+            parents.append((e.sourse, e.get_attributes_dict()))
         return parents
 
     def get_recommended_loading_depth(self):
@@ -741,11 +743,11 @@ class DBTrigger(DBScript):
             # защита от зацикливания, когда триггер обращается к своей же таблице
             if self.table_id == e.dest.id:
                 continue
-            children.append((e.dest, e.get_attributes_list()))
+            children.append((e.dest, e.get_attributes_dict()))
         return children
 
     def get_parents(self):
-        return [(self.table, ["contain"])]
+        return [(self.table, {"contain": True})]
 
 
 class DBTable(DatabaseObject):
@@ -791,13 +793,14 @@ class DBTable(DatabaseObject):
     def get_children(self):
         children = []
         for trigger in self.triggers.values():
-            children.append((trigger, ["contain"]))
+            # children.append((trigger, ["contain"]))
+            children.append((trigger, {"contain": True}))
         return children
 
     def get_parents(self):
         parents = []
         for e in self.edges_in:
-            parents.append((e.sourse, e.get_attributes_list()))
+            parents.append((e.sourse, e.get_attributes_dict()))
         return parents
 
     def get_recommended_loading_depth(self):
@@ -893,7 +896,8 @@ class Database(Node):
             self.procedures.values(),
             self.views.values()
         ):
-            children.append((item, ["contain"]))
+            # children.append((item, ["contain"]))
+            children.append((item, {"contain": True}))
         return children
 
     def get_parents(self):

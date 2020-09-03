@@ -73,7 +73,7 @@ def main():
     storage = NodeStorage(create_new_session(config))
     observed_app = storage.get_node_by_id(2)
     g = DpmGraph(storage, observed_app)
-    g.load_dependencies(levels_down=3)
+    g.load_dependencies(levels_down=4)
     g.export_to_gexf()
 
 
