@@ -10,6 +10,7 @@ from sync.scan_source import scan_application
 import settings
 from dpm.storage import NodeStorage
 from dpm.graphsworks import DpmGraph
+from cli import dpm
 
 
 def create_new_session(config):
@@ -78,4 +79,5 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    # main()
+    dpm()
