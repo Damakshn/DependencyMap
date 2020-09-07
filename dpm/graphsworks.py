@@ -33,19 +33,10 @@ class DpmGraph:
     подгружать информацию из БД.
     """
 
-    def __init__(self, storage, pov_node, nx_graph=None):
-        self._storage = storage
-        self.pov_id = pov_node.id
-        if nx_graph is None:
-            # nx_graph - основной граф, отражающий реальную структуру зависимостей
-            self.nx_graph = nx.MultiDiGraph()
-            self._add_nx_node_from_model(pov_node)
-        else:
-            self.nx_graph = nx_graph
-        self.levels_up = 0
-        self.levels_down = 0
-        self.reached_bottom_limit = False
-        self.reached_upper_limit = False
+    def __init__(self, pov_node):
+        self.pov_node = pov_node
+        self.nx_graph = nx.MultiDiGraph()
+        self._add_nx_node_from_model(pov_node)
 
     # region properties
     @property
@@ -56,14 +47,14 @@ class DpmGraph:
 
     # region public methods
     def load_dependencies(self, levels_up=0, levels_down=0):
-        zero_layer = [self._storage.get_node_by_id(self.pov_id)]
+        zero_layer = [self.pov_node]
         if levels_down > 0:
             self._load_data_bfs(zero_layer, levels_down)
         if levels_up > 0:
             self._load_data_bfs(zero_layer, levels_up, reverse=True)
 
     def export_to_gexf(self):
-        nx.write_gexf(self.nx_graph, f"{self[self.pov_id]['label']}.gexf", encoding="utf-8", prettyprint=True)
+        nx.write_gexf(self.nx_graph, f"{self[self.pov_node.id]['label']}.gexf", encoding="utf-8", prettyprint=True)
     # endregion
 
     # region utility methods

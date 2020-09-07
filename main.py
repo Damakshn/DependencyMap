@@ -8,7 +8,6 @@ from dpm.linking import analize_links
 from sync.scan_db import scan_database
 from sync.scan_source import scan_application
 import settings
-from dpm.storage import NodeStorage
 from dpm.graphsworks import DpmGraph
 from cli import dpm
 
@@ -67,15 +66,6 @@ def prepare_test_sqlite_db(connector, config):
     # следующий этап - построение связей
     analize_links(session, conn)
     session.commit()
-
-
-def main():
-    config = settings.config
-    storage = NodeStorage(create_new_session(config))
-    observed_app = storage.get_node_by_id(2)
-    g = DpmGraph(storage, observed_app)
-    g.load_dependencies(levels_down=4)
-    g.export_to_gexf()
 
 
 if __name__ == "__main__":
