@@ -1,7 +1,3 @@
-import matplotlib.pyplot as plt
-import networkx as nx
-
-
 def get_config():
     """
     Возвращает словарь с настройками отрисовки вершин и рёбер различных типов.
@@ -12,16 +8,16 @@ def get_config():
     # markers here https://matplotlib.org/3.1.0/api/markers_api.html#module-matplotlib.markers
     return {
         "nodes": {
-            "Database":          {"node_size": 1600, "node_color": "#FFFF00", "node_shape": "*", "linewidths": 3.5, "edgecolors": "#FFD700"},
-            "Application":       {"node_size": 1600, "node_color": "#00BFFF", "node_shape": "p", "linewidths": 2.5, "edgecolors": "#00008B"},
-            "Form":              {"node_size": 300,  "node_color": "#FF4500", "node_shape": "s", "linewidths": 0.5, "edgecolors": "#000000"},
-            "ClientQuery":       {"node_size": 50,   "node_color": "#FF4500", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#00BFFF"},
-            "DBTrigger":         {"node_size": 50,   "node_color": "#FF0000", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#DC143C"},
-            "DBStoredProcedure": {"node_size": 50,   "node_color": "#00BFFF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#0000FF"},
-            "DBView":            {"node_size": 50,   "node_color": "#32CD32", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#000000"},
-            "DBTableFunction":   {"node_size": 50,   "node_color": "#A0522D", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#000000"},
-            "DBScalarFunction":  {"node_size": 50,   "node_color": "#FF00FF", "node_shape": "d", "linewidths": 0.5, "edgecolors": "#000000"},
-            "DBTable":           {"node_size": 100,  "node_color": "#DCDCDC", "node_shape": "s", "linewidths": 0.5, "edgecolors": "#000000"},
+            "Database":          {"node_size": 1600, "node_color": "#FFFF00", "rgb":{"r": 255, "g": 255, "b": 0}, "node_shape": "*", "linewidths": 3.5, "edgecolors": "#FFD700"},
+            "Application":       {"node_size": 1600, "node_color": "#00BFFF", "rgb":{"r": 0, "g": 191, "b": 255}, "node_shape": "p", "linewidths": 2.5, "edgecolors": "#00008B"},
+            "Form":              {"node_size": 300,  "node_color": "#FF4500", "rgb":{"r": 255, "g": 69, "b": 0}, "node_shape": "s", "linewidths": 0.5, "edgecolors": "#000000"},
+            "ClientQuery":       {"node_size": 50,   "node_color": "#FF4500", "rgb":{"r": 255, "g": 69, "b": 0}, "node_shape": "d", "linewidths": 0.5, "edgecolors": "#00BFFF"},
+            "DBTrigger":         {"node_size": 50,   "node_color": "#FF0000", "rgb":{"r": 255, "g": 0, "b": 0}, "node_shape": "d", "linewidths": 0.5, "edgecolors": "#DC143C"},
+            "DBStoredProcedure": {"node_size": 50,   "node_color": "#00BFFF", "rgb":{"r": 0, "g": 191, "b": 255}, "node_shape": "d", "linewidths": 0.5, "edgecolors": "#0000FF"},
+            "DBView":            {"node_size": 50,   "node_color": "#32CD32", "rgb":{"r": 160, "g": 82, "b": 45}, "node_shape": "d", "linewidths": 0.5, "edgecolors": "#000000"},
+            "DBTableFunction":   {"node_size": 50,   "node_color": "#A0522D", "rgb":{"r": 255, "g": 255, "b": 0}, "node_shape": "d", "linewidths": 0.5, "edgecolors": "#000000"},
+            "DBScalarFunction":  {"node_size": 50,   "node_color": "#FF00FF", "rgb":{"r": 255, "g": 0, "b": 255}, "node_shape": "d", "linewidths": 0.5, "edgecolors": "#000000"},
+            "DBTable":           {"node_size": 100,  "node_color": "#DCDCDC", "rgb":{"r": 220, "g": 220, "b": 220}, "node_shape": "s", "linewidths": 0.5, "edgecolors": "#000000"},
         },
         "edges": {
             "select":   {"width": 0.3, "edge_color": "#32CD32", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
@@ -36,21 +32,3 @@ def get_config():
             "trigger":  {"width": 0.3, "edge_color": "#FFD700", "style": "solid", "alpha": 0.7, "arrows": True, "label": None},
         }
     }
-
-
-def draw_graph(G):
-
-    config = get_config()
-
-    pos = nx.spring_layout(G)
-
-    for class_name in config["nodes"]:
-        nx.draw_networkx_nodes(G, pos, [n for n in G.node if G.node[n]["node_class"]==class_name], **config["nodes"][class_name])
-
-    for operation in config["edges"]:
-        nx.draw_networkx_edges(G, pos, [e for e in G.edges if G.adj[e[0]][e[1]][0].get(operation)==True], **config["edges"][operation])
-
-    nx.draw_networkx_labels(G, pos, {n:G.node[n]["label"] for n in G.node}, font_size=6)
-
-    plt.axis('off')
-    plt.show()
