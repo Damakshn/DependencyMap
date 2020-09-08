@@ -40,6 +40,13 @@ def view(a, databases, apps, forms, components, tables, views, sp, tf, sf, tr):
         tf = True
         sf = True
         tr = True
+    # ToDo сортировка результата
+    # ToDo фильтр по названию
+    result = repository.get_nodes_by_class(databases, apps, forms, components, tables, views, sp, tf, sf, tr)
+    row_format = "{:6}    {:30}    {}"
+    click.echo(row_format.format("ID", "НАЗВАНИЕ", "ПОЛНОЕ НАЗВАНИЕ"))
+    for item in result:
+        click.echo(row_format.format(item.id, item.name, item.full_name))
 
 @dpm.command()
 @click.option("-name", type=str)
