@@ -430,7 +430,7 @@ class Form(Node):
         """
         Возвращает подпись, которую будет иметь нода при обработке графа.
         """
-        return str(self.id)
+        return self.alias
 
     @property
     def categories(self):

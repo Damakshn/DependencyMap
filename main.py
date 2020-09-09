@@ -7,8 +7,6 @@ import dpm.models as models
 from dpm.linking import analize_links
 from sync.scan_db import scan_database
 from sync.scan_source import scan_application
-import settings
-from dpm.graphsworks import DpmGraph
 from cli import dpm
 
 
@@ -66,6 +64,10 @@ def prepare_test_sqlite_db(connector, config):
     # следующий этап - построение связей
     analize_links(session, conn)
     session.commit()
+
+
+def main():
+    test_scan(settings.config)
 
 
 if __name__ == "__main__":

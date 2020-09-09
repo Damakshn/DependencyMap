@@ -41,7 +41,6 @@ def view(a, databases, apps, forms, components, tables, views, sp, tf, sf, tr):
         sf = True
         tr = True
     # ToDo сортировка результата
-    # ToDo фильтр по названию
     result = repository.get_nodes_by_class(databases, apps, forms, components, tables, views, sp, tf, sf, tr)
     row_format = "{:6}    {:30}    {}"
     click.echo(row_format.format("ID", "НАЗВАНИЕ", "ПОЛНОЕ НАЗВАНИЕ"))
