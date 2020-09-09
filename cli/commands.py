@@ -3,17 +3,24 @@ import click
 import settings
 from dpm.node_repository import NodeRepository, RepositoryException
 from dpm.graphsworks import DpmGraph
+from sync.scanner import DpmScanner
 
 repository = None
+
 
 @click.group()
 def dpm():
     global repository
     repository = NodeRepository.get_instance(settings.config)
 
+
 @dpm.command()
 def scan():
-    print("Scan")
+    scanner = DpmScanner(settings.config["connector"])
+    scanner.load_applications(settings.config["applications"])
+    scanner.load_databases(settings.config["databases"])
+    scanner.run_scanning()
+
 
 @dpm.command()
 @click.option("-a", is_flag=True)
@@ -42,10 +49,14 @@ def view(a, databases, apps, forms, components, tables, views, sp, tf, sf, tr):
         tr = True
     # ToDo сортировка результата
     result = repository.get_nodes_by_class(databases, apps, forms, components, tables, views, sp, tf, sf, tr)
-    row_format = "{:6}    {:30}    {}"
-    click.echo(row_format.format("ID", "НАЗВАНИЕ", "ПОЛНОЕ НАЗВАНИЕ"))
+    # row_format = "{:6}    {:30}    {}"
+    row_format = "{:6}    {:30}"
+    click.echo(row_format.format("ID", "НАЗВАНИЕ"))
+    # click.echo(row_format.format("ID", "НАЗВАНИЕ", "ПОЛНОЕ НАЗВАНИЕ"))
     for item in result:
-        click.echo(row_format.format(item.id, item.name, item.full_name))
+        # click.echo(row_format.format(item.id, item.name, item.full_name))
+        click.echo(row_format.format(item.id, item.name))
+
 
 @dpm.command()
 @click.option("-name", type=str)

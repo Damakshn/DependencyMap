@@ -1,7 +1,5 @@
 import logging
 import os
-import datetime
-import calendar
 from dpm.connector import Connector
 import dpm.models as models
 from dpm.linking import analize_links
@@ -25,6 +23,7 @@ def test_scan(config):
 def prepare_test_sqlite_db(connector, config):
     test_app_config = list(config["applications"].values())[0]
     test_app_name = list(config["applications"].keys())[0]
+    test_app_cod = test_app_config.get("cod_application")
     path_to_app = test_app_config["path"]
     test_db_name = config["databases"][0]
 
@@ -33,22 +32,22 @@ def prepare_test_sqlite_db(connector, config):
         os.remove(config["connector"]["host_dpm"][10:])
     session = connector.connect_to_dpm()
 
-    logging.info(f"Соединяемся с базой {config['testdb']}")
+    logging.info(f"Соединяемся с базой {test_db_name}")
     try:
-        conn = connector.connect_to(config["testdb"])
+        conn = connector.connect_to(test_db_name)
     except Exception:
-        logging.critical(f"Не удалось соединиться с БД {config['testdb']}; убедитесь, что у вас есть права для этого.")
+        logging.critical(f"Не удалось соединиться с БД {test_db_name}; убедитесь, что у вас есть права для этого.")
         exit()
 
-    # создаём тестовый АРМ, чтобы синхронизировать его
-    # создаём искусственную дату обновления, чтобы синхронизация сработала
-    la = datetime.datetime.fromtimestamp(
-        calendar.timegm((datetime.date.today() - datetime.timedelta(days=30)).timetuple())
-    )
-    # создаём в базе ДПМ запись о тестовой базе, чтобы было что синхронизировать
-    testdb = models.Database(name=test_db_name, last_revision=la, last_update=la)
+    testdb = models.Database(name=test_db_name)
     session.add(testdb)
-    test_app = models.Application(path=path_to_app, name=test_app_name, last_update=la, default_database=testdb)
+    # test_app = models.Application(path=path_to_app, name=test_app_name, last_update=la, default_database=testdb)
+    test_app = models.Application(
+        path=path_to_app,
+        name=test_app_name,
+        default_database=testdb,
+        cod_application=test_app_cod
+    )
     session.add(test_app)
     session.commit()
 
@@ -66,10 +65,5 @@ def prepare_test_sqlite_db(connector, config):
     session.commit()
 
 
-def main():
-    test_scan(settings.config)
-
-
 if __name__ == "__main__":
-    # main()
     dpm()
