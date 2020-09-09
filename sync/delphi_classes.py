@@ -7,6 +7,7 @@ from .common_classes import Original
 from .mixins import SQLProcessorMixin
 import logging
 
+
 class DelphiToolsException(Exception):
     pass
 
@@ -36,7 +37,7 @@ class DelphiProject(Original):
             if root.tag.startswith("{"):
                 namespace = root.tag[:root.tag.find("}")+1]
             items = root.find(f"{namespace}ItemGroup")
-            logging.debug(f"Достаём формы проекта")
+            logging.debug("Достаём формы проекта")
             no_errors = True
             for item in items.findall(f"{namespace}DCCReference"):
                 # имя модуля достаётся вот так; пока не востребовано
@@ -53,7 +54,6 @@ class DelphiProject(Original):
                         no_errors = False
                         msg = f"Файл с описанием формы {form_path} не найден."
                         logging.error(msg)
-                        #raise DelphiToolsException(msg)
                         continue
                     form_update = datetime.datetime.fromtimestamp(os.path.getmtime(form_path))
                     # по максимальной среди форм дате обновления получаем дату обновления арма
@@ -100,7 +100,7 @@ class DelphiForm(Original):
         Словарь компонентов, содержащих запросы к БД.
         """
         return {c.name: c for c in self.components if isinstance(c, DelphiQuery)}
-    
+
     def parse(self):
         logging.debug(f"Парсим форму {self.name}")
         try:
@@ -110,9 +110,9 @@ class DelphiForm(Original):
             self.alias = self.data["name"]
             file.close()
         except DFMException as e:
-                logging.error(f"Не удалось распарсить форму {self.name}, компоненты не читаются, ошибка - {e}")
-                self.is_broken = True
-                self.parsing_error_message = str(e)
+            logging.error(f"Не удалось распарсить форму {self.name}, компоненты не читаются, ошибка - {e}")
+            self.is_broken = True
+            self.parsing_error_message = str(e)
         if not self.is_broken:
             logging.debug(f"Формируем список компонентов формы {self.name}")
             for key in self.data:
@@ -169,8 +169,8 @@ class DelphiConnection(DBComponent):
                 # извлекаем имя базы из свойств компонента
                 # если указано имя тестовой базы, то отрезаем _test в конце
                 dbname = arg.split("=")[1].strip()
-                #if dbname.endswith("_test"):
-                #    dbname = dbname[:dbname.find("_test")]
+                if dbname.endswith("_test"):
+                    dbname = dbname[:dbname.find("_test")]
                 self.database = dbname
                 break
 
