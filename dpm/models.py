@@ -94,8 +94,8 @@ class Edge(BaseDPM):
     __tablename__ = "Edge"
     id = Column(Integer, primary_key=True)
     # какие сущности соединены
-    sourse_id = Column(Integer, ForeignKey("Node.id"), nullable=False)
-    sourse = relationship("Node", foreign_keys=[sourse_id])
+    source_id = Column(Integer, ForeignKey("Node.id"), nullable=False)
+    source = relationship("Node", foreign_keys=[source_id])
     dest_id = Column(Integer, ForeignKey("Node.id"), nullable=False)
     dest = relationship("Node", foreign_keys=[dest_id])
     comment = Column(Text)
@@ -111,7 +111,7 @@ class Edge(BaseDPM):
     is_broken = Column(Boolean, default=False, nullable=False)
     # если True, то один из соединяемых объектов является фиктивным
     is_dummy = Column(Boolean, default=False, nullable=False)
-    # поля, описывающие что объект sourse делает с объектом dest
+    # поля, описывающие что объект source делает с объектом dest
     calc = Column(Boolean, default=False, nullable=False)
     select = Column(Boolean, default=False, nullable=False)
     insert = Column(Boolean, default=False, nullable=False)
@@ -122,16 +122,16 @@ class Edge(BaseDPM):
     drop = Column(Boolean, default=False, nullable=False)
 
     def __repr__(self):
-        if isinstance(self.sourse, DBScript):
-            sourse_node_name = self.sourse.full_name
+        if isinstance(self.source, DBScript):
+            source_node_name = self.source.full_name
         else:
-            sourse_node_name = self.sourse.name
+            source_node_name = self.source.name
 
         if isinstance(self.dest, DBScript):
             dest_node_name = self.dest.full_name
         else:
             dest_node_name = self.dest.name
-        return f"{sourse_node_name} -> {dest_node_name}"
+        return f"{source_node_name} -> {dest_node_name}"
 
     def get_attributes_dict(self):
         template = ["calc", "select", "insert", "update", "delete", "exec", "drop", "truncate"]
@@ -150,7 +150,7 @@ Node.edges_in = relationship(
     passive_deletes=True)
 Node.edges_out = relationship(
     "Edge",
-    foreign_keys=[Edge.sourse_id],
+    foreign_keys=[Edge.source_id],
     cascade="all, delete",
     passive_deletes=True)
 
@@ -473,6 +473,8 @@ class Application(Node):
     path = Column(String(1000), nullable=False)
     default_database_id = Column(ForeignKey("Database.id"))
     default_database = relationship("Database", foreign_keys=[default_database_id])
+    # код приложения в старой системе
+    cod_application = Column(Integer)
     forms = relationship(
         "Form",
         collection_class=attribute_mapped_collection("path"),
@@ -498,7 +500,8 @@ class Application(Node):
         return Application(
             name=original.name,
             last_update=original.last_update,
-            path=original.path
+            path=original.path,
+            cod_application=original.cod_application
         )
 
     def __repr__(self):
@@ -581,7 +584,7 @@ class DBScript(DatabaseObject, SQLQueryMixin):
         children = []
         for e in self.edges_out:
             # защита от рекурсивных вызовов, где ребро графа циклическое
-            if e.sourse.id == e.dest.id:
+            if e.source.id == e.dest.id:
                 continue
             children.append((e.dest, e.get_attributes_dict()))
         return children
@@ -590,9 +593,9 @@ class DBScript(DatabaseObject, SQLQueryMixin):
         parents = []
         for e in self.edges_in:
             # защита от рекурсивных вызовов, где ребро графа циклическое
-            if e.sourse.id == e.dest.id:
+            if e.source.id == e.dest.id:
                 continue
-            parents.append((e.sourse, e.get_attributes_dict()))
+            parents.append((e.source, e.get_attributes_dict()))
         return parents
 
     def get_recommended_loading_depth(self):
@@ -800,7 +803,7 @@ class DBTable(DatabaseObject):
     def get_parents(self):
         parents = []
         for e in self.edges_in:
-            parents.append((e.sourse, e.get_attributes_dict()))
+            parents.append((e.source, e.get_attributes_dict()))
         return parents
 
     def get_recommended_loading_depth(self):

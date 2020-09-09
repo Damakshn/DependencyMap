@@ -35,7 +35,7 @@ def analize_links(session, conn):
                 for match in regexp.finditer(script.sql):
                     edge_template[match.lastgroup] = True
                 if len(edge_template) > 0:
-                    edge = Edge(sourse=script, dest=obj)
+                    edge = Edge(source=script, dest=obj)
                     for key in edge_template:
                         setattr(edge, key, True)
                     session.add(edge)
