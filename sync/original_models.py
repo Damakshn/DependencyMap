@@ -90,8 +90,8 @@ class OriginalScript(OriginalDatabaseObject, SQLProcessorMixin):
 
 @dataclass
 class OriginalDatabase(DBOriginal):
-    name:str
-    last_update:datetime
+    name: str
+    last_update: datetime
 
     @classmethod
     def fetch_from_metadata(cls, conn):

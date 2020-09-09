@@ -9,7 +9,7 @@ from .delphi_classes import DelphiProject
 def scan_application(app, session):
     original_project = DelphiProject(app.path)
     # продолжать только если требуется обновление
-    if (original_project.last_update is None) or (original_project.last_update <= app.last_update):
+    if (app.last_update is not None) and (original_project.last_update <= app.last_update):
         return
     # достаём из системы список доступных баз, чтобы прицепить к ним компоненты
     available_databases = {db.name: db for db in session.query(Database).all()}
@@ -20,7 +20,9 @@ def scan_application(app, session):
     condition = or_(Form.applications.any(id=app.id), Form.path.in_(original_project.forms.keys()))
     form_nodes = {
         form.path: form
-        for form in session.query(Form).options(selectinload(Form.applications), selectinload(Form.components)).filter(condition)
+        for form in session.query(Form).options(
+            selectinload(Form.applications), selectinload(Form.components)
+        ).filter(condition)
     }
     # словарь форм, которые надо будет распарсить и залить/перезалить их компоненты в ДПМ
     dirty_forms = {}
@@ -64,7 +66,11 @@ def scan_application(app, session):
             )
     persistent_components = [component for component in session if isinstance(component, ClientQuery)]
 
-    original_components = {component[0]: component[1] for component in itertools.chain.from_iterable([form.queries.items() for form in original_project.forms.values()])}
+    original_components = {
+        component[0]: component[1]
+        for component in itertools.chain.from_iterable(
+            [form.queries.items() for form in original_project.forms.values()]
+        )}
 
     for component in persistent_components:
         original_component = original_components[component.name]

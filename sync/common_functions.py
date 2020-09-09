@@ -1,6 +1,6 @@
 """
 Функции и классы общего назначения, используемые для получения информации
-об объектах информационной системы или для их синхронизации с 
+об объектах информационной системы или для их синхронизации с
 нодами графа зависимостей.
 """
 from typing import List, Dict
@@ -16,6 +16,7 @@ def get_remaining_objects(session, cls) -> List[Node]:
     result = [item for item in session.dirty if isinstance(item, cls)]
     result.extend([item for item in session.new if isinstance(item, cls)])
     return result
+
 
 def sync_subordinate_members(originals: Dict, node_class, nodes: Dict, session, parent):
     """
@@ -49,6 +50,7 @@ def sync_subordinate_members(originals: Dict, node_class, nodes: Dict, session, 
         if object_key not in originals:
             session.delete(nodes[object_key])
 
+
 def needs_update(original, node) -> bool:
     """
     Сравнивает реализацию объекта из исходников на диске с реализацией
@@ -64,4 +66,3 @@ def needs_update(original, node) -> bool:
         return node.crc32 != original.crc32
     else:
         return True
-

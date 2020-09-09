@@ -8,8 +8,18 @@ from sqlalchemy.exc import ProgrammingError, DBAPIError
 
 
 def analize_links(session, conn):
-    components = session.query(ClientQuery).filter(or_(ClientQuery.last_revision == None, ClientQuery.last_update > ClientQuery.last_revision)).all()
-    all_objects = session.query(DatabaseObject).filter(or_(DBScript.last_revision == None, DBScript.last_update > DBScript.last_revision)).all()
+    components = session.query(ClientQuery).filter(
+        or_(
+            ClientQuery.last_revision is None,
+            ClientQuery.last_update > ClientQuery.last_revision
+        )
+    ).all()
+    all_objects = session.query(DatabaseObject).filter(
+        or_(
+            DBScript.last_revision is None,
+            DBScript.last_update > DBScript.last_revision
+        )
+    ).all()
     script_name = ""
     obj_name = ""
     for obj in all_objects:
@@ -21,8 +31,12 @@ def analize_links(session, conn):
             query = text("select referencing_id from sys.dm_sql_referencing_entities(:long_name, 'OBJECT')")
             refs = conn.execute(query, long_name=obj.long_name)
             ids = [row[0] for row in refs]
-            scripts = [obj for obj in all_objects if obj.database_object_id in ids and isinstance(obj,DBScript)]
-            # ToDo изменить способ работы с компонентами хранимых процедур, у них должно быть поле proc_name или как-то так
+            scripts = [
+                obj
+                for obj in all_objects
+                if obj.database_object_id in ids and isinstance(obj, DBScript)
+            ]
+            # ToDo изменить способ работы с компонентами хранимых процедур, у них должно быть поле proc_name
             home_regexp = re.compile(obj.get_regexp_for_home_db())
             foreign_regexp = re.compile(obj.get_regexp_for_foreign_db())
             for script in itertools.chain(scripts, components):

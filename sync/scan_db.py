@@ -1,5 +1,4 @@
 from sqlalchemy.orm import selectinload
-from .common_classes import SyncException
 from dpm.models import (
     Database,
     DBTable,
@@ -7,14 +6,11 @@ from dpm.models import (
     DBTableFunction,
     DBView,
     DBStoredProcedure,
-    DBTrigger,
-    DBScript,
-    Edge)
+    DBTrigger
+    )
 import sync.original_models as original_models
 from .common_functions import sync_subordinate_members
 
-from typing import List, Dict
-import itertools
 import logging
 
 
@@ -24,23 +20,23 @@ def scan_database(base, session, conn):
     """
     original_db = original_models.OriginalDatabase.fetch_from_metadata(conn)
     if original_db.last_update == base.last_update:
-        logging.info(f"В оригинальной БД не было изменений, выходим")
+        logging.info("В оригинальной БД не было изменений, выходим")
         return
     base = session.query(Database).options(
         selectinload(Database.scripts),
         selectinload(Database.tables)
     ).filter(Database.id == base.id).one()
-    
+
     logging.debug(f"Достаём оригиналы объектов БД {base.name}")
     original_proc_data_set = original_models.OriginalProcedure.get_all(conn)
     original_views_data_set = original_models.OriginalView.get_all(conn)
     original_tabfunc_data_set = original_models.OriginalTableFunction.get_all(conn)
     original_sfunc_data_set = original_models.OriginalScalarFunction.get_all(conn)
     original_tables_data_set = original_models.OriginalTable.get_all(conn)
-    
+
     logging.debug(f"Синхронизируем хранимые процедуры БД {base.name}")
     sync_subordinate_members(original_proc_data_set, DBStoredProcedure, base.procedures, session, base)
-    
+
     logging.debug(f"Синхронизируем представления БД {base.name}")
     sync_subordinate_members(original_views_data_set, DBView, base.views, session, base)
 
@@ -53,20 +49,23 @@ def scan_database(base, session, conn):
     logging.debug(f"Синхронизируем таблицы БД {base.name}")
     sync_subordinate_members(original_tables_data_set, DBTable, base.tables, session, base)
     persistent_tables = {table.name: table for table in session if isinstance(table, DBTable)}
-    
+
     logging.debug(f"Сопоставляем триггеры для оставшихся таблиц БД {base.name}")
     for table_name in persistent_tables:
         table = persistent_tables[table_name]
         logging.debug(f"Собираем триггеры для таблицы {table_name} в БД {base.name}")
-        original_triggers_data_set = original_models.OriginalTrigger.get_triggers_for_table(conn, table.database_object_id)
+        original_triggers_data_set = original_models.OriginalTrigger.get_triggers_for_table(
+            conn,
+            table.database_object_id
+        )
         sync_subordinate_members(
             original_triggers_data_set,
-            DBTrigger, 
-            table.triggers, 
+            DBTrigger,
+            table.triggers,
             session,
             table
         )
-    
+
     # обновляем метаданные самой базы
     base.update_from(original_db)
     logging.info(f"Обработка базы {base.name} завершена")
