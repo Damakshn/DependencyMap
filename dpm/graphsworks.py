@@ -1,4 +1,5 @@
 import networkx as nx
+from . import models
 
 
 """
@@ -65,11 +66,32 @@ class DpmGraph:
             for subnode, edge_attrs in getattr(node, method_name)():
                 if subnode.id not in self.nx_graph:
                     self._add_nx_node_from_model(subnode)
-                    next_layer.append(subnode)
+                    if not self._should_skip_node(subnode, depth, reverse):
+                        next_layer.append(subnode)
                 s, d = (subnode, node) if reverse else (node, subnode)
                 self._add_edge(edge_attrs, source=s, destination=d)
         if depth > 1:
             self._load_data_bfs(next_layer, depth - 1, reverse=reverse)
+    
+    def _should_skip_node(self, node, depth, reverse):
+        """
+        Немножко костыльная функция, отсекающая очередную ноду от попадания в следующий
+        слой во время загрузки зависимостей.
+        """
+
+        """
+        Исключаем ноды таблиц БД при построении зависимостей вверх.
+
+        Пример: строим восходящие зависимости какой-нибудь таблицы, эту таблицу дёргает
+        какой-нибудь триггер, от триггера по восходящей связи попадаем на таблицу, к которой
+        он приделан, а через эту таблицу загружается куча лишних восходящих связей, которые нам
+        по сути не нужны. 
+
+        Чтобы избежать такой ситуации, при построении восходящих связей ноды таблиц БД не включаются
+        в следующую итерацию и обход графа на них останавливается.
+        """
+        if isinstance(node, models.DBTable) and reverse and node.id != self.pov_node.id:
+            return True
 
     def _add_nx_node_from_model(self, model):
         """
